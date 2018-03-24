@@ -1,0 +1,13 @@
+commonlib.h
+--a common lib for both dsm.c and sm.c to reduce code redundancy. Specifiaclly, there are two things worthy to be mentioned,
+    --'protocol_write' and 'protocol_read', they implement a protocol above TCP, to make sure one read operation exact the data one write does, for any filedesciptor message delivery, such as socket and pipe
+    --'generate_client_msg' and 'split_client_msg' is a protocol above the protocol above, which is to wrap the msg sent from client to server. Server will deny any messages not following this protocol
+
+param.h param.c
+--to process the arguments when execute 'dsm'. The struct Parameters is to store the basic arguments when call the function dsm. The function parameters_init() will initialize and allocate the memory for the arguments. The function extract_host_names() will open the hostfile and store all nodes. The main function is Parameters *parse_argv(), which will store all the information from the command line and return the struct. Finally, it also contains log functions, they will write what server and client do to the log file.
+
+dsm.c
+--the so-called 'server' or 'allocator'. It fork()s N process to execute ssh command to run the 'EXECUTABLE FILE' on remote(or local) host, wait for the N client hosts to connect back to server via TCP and then runs an infinite loop to listen the sockets one by one and processe them in order. This mechanism is easier to manage the message synchronously than fork()ing N more new processes for the N sockets.
+
+sm.c
+--when called by server via ssh it connect back to server and fork()s a new process to listen to the socket infinitely. So there are two process in a client which includes this SM library API. An anonymous pipe is created for the communication between them. For example, in 'sm_barrier', parent process requests socket listening by sending message via pipe to child process. Thus, child process stops reading socket to let parent to handle it. After parent process receives the barrier synchronization message from server, it return the socket listening permission to child process.
