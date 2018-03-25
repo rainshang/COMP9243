@@ -1,3 +1,6 @@
+#ifndef _COMMON_LIB_H
+#define _COMMON_LIB_H
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -8,13 +11,19 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #define SOCKET_TIMEOUT 10
+#define MSG_CONFIRM_SURFIX "_CONFIRM"
+#define LEN_MSG_CONFIRM_SURFIX 8
 #define CLIENT_MSG_REGISTER "CLIENT_MSG_REGISTER"
 #define CLIENT_MSG_EXIT "CLIENT_MSG_EXIT"
 #define SERVER_MSG_EXIT_CLIENTS "SERVER_MSG_EXIT_CLIENTS"
 #define SERVER_MSG_BARRIER "SERVER_MSG_BARRIER"
-#define SERVER_MSG_UNBARRIER "SERVER_MSG_UNBARRIER"
+
+typedef int bool;
+#define true 1
+#define false 0
 
 /**
  * Like perror(const char *), don't call it when no errno is set
@@ -34,7 +43,7 @@ void set_fd_block(int fd)
     fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 }
 
-void set_fd_unblock(int fd)
+void set_fd_nonblock(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -54,8 +63,6 @@ void set_fd_sync(int fd)
     fcntl(fd, F_SETFL, flags & ~O_ASYNC);
 }
 
-
-
 const char *get_localhost_ip()
 {
     char host_name[NI_MAXSERV];
@@ -66,6 +73,26 @@ const char *get_localhost_ip()
     }
     struct in_addr **h_addr_list = (struct in_addr **)gethostbyname(host_name)->h_addr_list;
     return inet_ntoa(*h_addr_list[0]);
+}
+
+/**
+ * set socket timeout
+ */
+void set_socket_timeout(int socket_fd, unsigned seconds)
+{
+    struct timeval timeout;
+    timeout.tv_sec = seconds;
+    timeout.tv_usec = 0;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    {
+        perror("Server socket cannot set receive timeout\n");
+        exit(EXIT_FAILURE);
+    }
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+    {
+        perror("Server socket cannot set send timeout\n");
+        exit(EXIT_FAILURE);
+    }
 }
 
 void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port)
@@ -95,20 +122,61 @@ int protocol_write(int fd, const char *data)
     return write(fd, buf, sizeof(buf));
 }
 
-int protocol_read(int fd, char *buf)
+int protocol_read_once(int fd, char *buf)
 {
     uint32_t len_data;
     int len_len = read(fd, &len_data, sizeof(uint32_t));
-    if (len_len > 0) // len == sizeof(uint32_t)
+    if (len_len > 0) // len_len == sizeof(uint32_t)
     {
         read(fd, buf, len_data);
         buf[len_data] = '\0';
         return len_data;
     }
-    return len_len; // does not match protocol, invalid msg
+    return len_len;
 }
 
-int check_errno()
+/**
+ * will check the O_NONBLOCK flag to read in an infinite loop until getting valid messages or error happening
+ */
+int protocol_read(int fd, char *buf)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    bool is_fd_block = !(flags & O_NONBLOCK);
+
+    int len;
+    while (true)
+    {
+        len = protocol_read_once(fd, buf);
+        if (len > 0)
+        {
+            return len;
+        }
+        else if (len == 0)
+        {
+            if (is_fd_block)
+            {
+                continue;
+            }
+            else // error
+            {
+                return len;
+            }
+        }
+        else
+        {
+            if (is_fd_block) // error
+            {
+                return len;
+            }
+            else
+            {
+                continue;
+            }
+        }
+    }
+}
+
+bool check_errno()
 {
     return errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN;
 }
@@ -130,8 +198,10 @@ int str_len(const char *p_char)
 /**
  * All the message sent from client to server MUST call this function to wrap,
  * otherwise server will deny it
+ * 
+ * remember to free
  */
-const char *generate_client_msg(int nid, const char *command)
+char *generate_client_msg(int nid, const char *command)
 {
     int len_msg = str_len(command) + 2;
     int tmp_nid = nid;
@@ -167,8 +237,10 @@ const char *generate_client_msg(int nid, const char *command)
  *      the nid in msg, will save in this, e.g. 1
  * 
  * success, return command, e.g. "CLIENT_MSG_EXIT"; else NULL
+ * 
+ * remember to free
  */
-const char *split_client_msg(const char *msg, int *nid)
+char *split_client_msg(const char *msg, int *nid)
 {
     char *p_sharp = strchr(msg, '#');
     if (!p_sharp)
@@ -206,3 +278,35 @@ const char *split_client_msg(const char *msg, int *nid)
     }
     return command;
 }
+
+/**
+ * generate a confirm(reply) message of one message, {$original_msg}MSG_CONFIRM_SURFIX
+ * 
+ * remember to free
+ */
+char *generate_confirm_msg(const char *command)
+{
+    unsigned len_msg = str_len(command);
+    len_msg += LEN_MSG_CONFIRM_SURFIX;
+    char *msg = malloc(++len_msg);
+    snprintf(msg,
+             len_msg,
+             "%s%s",
+             command,
+             MSG_CONFIRM_SURFIX);
+    msg[len_msg] = '\0';
+    return msg;
+}
+
+/**
+ * check $msg is the confirm message of $command, {$msg} = {$command}MSG_CONFIRM_SURFIX
+ */
+bool is_confirm_msg(const char *msg, const char *command)
+{
+    char *expected_msg = generate_confirm_msg(command);
+    bool b = !strcmp(expected_msg, msg);
+    free(expected_msg);
+    return b;
+}
+
+#endif /* _COMMON_LIB_H */

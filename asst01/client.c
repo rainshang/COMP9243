@@ -19,11 +19,15 @@ int main(int argc, char *argv[])
     // sscanf(argv[4], "%d", &host_id);
     // if (host_id != 10001) // mock accept() timeout
     // {
-
     if (sm_node_init(&argc, &argv, &host_count, &host_id))
     {
         fatal(host_id, "share: Cannot initialise!");
     }
+    // }
+
+    // if(host_id == 10001){
+    //     sleep(5);
+    //     return;
     // }
 
     sm_barrier();

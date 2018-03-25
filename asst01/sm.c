@@ -104,7 +104,22 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
 
     // register to server with nid
-    protocol_write(client_socket_fd, generate_client_msg(host_id, CLIENT_MSG_REGISTER));
+    char *msg_send = generate_client_msg(host_id, CLIENT_MSG_REGISTER);
+    protocol_write(client_socket_fd, msg_send);
+    free(msg_send);
+    char server_msg[BUFSIZ];
+    int len_server_msg = protocol_read(client_socket_fd, server_msg);
+
+    if (!len_server_msg)
+    {
+        sm_relase();
+        return -1;
+    }
+    if (!is_confirm_msg(server_msg, CLIENT_MSG_REGISTER))
+    {
+        sm_relase();
+        return -1;
+    }
 
     struct sigaction sa;
     sa.sa_flags = 0;
@@ -124,7 +139,9 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
 
 void sm_node_exit(void)
 {
-    protocol_write(client_socket_fd, generate_client_msg(host_id, CLIENT_MSG_EXIT));
+    char *msg_send = generate_client_msg(host_id, CLIENT_MSG_EXIT);
+    protocol_write(client_socket_fd, msg_send);
+    free(msg_send);
     sm_relase();
 }
 
@@ -136,15 +153,17 @@ void *sm_malloc(size_t size)
 void sm_barrier(void)
 {
     set_fd_sync(client_socket_fd);
-    protocol_write(client_socket_fd, generate_client_msg(host_id, SERVER_MSG_BARRIER));
+    char *msg_send = generate_client_msg(host_id, SERVER_MSG_BARRIER);
+    protocol_write(client_socket_fd, msg_send);
+    free(msg_send);
 
-    while (1)
+    while (true)
     {
         char server_ms[BUFSIZ];
         int len = protocol_read(client_socket_fd, server_ms);
         if (len > 0)
         {
-            if (!strcmp(SERVER_MSG_UNBARRIER, server_ms))
+            if (is_confirm_msg(server_ms, SERVER_MSG_BARRIER))
             {
                 break;
             }

@@ -14,5 +14,5 @@ client: client.c libsm.a
 	@echo "'client' has been made."
 
 clean:
-	rm *.o
+	rm *.o *.gch
 	@echo "make done."

@@ -1,5 +1,3 @@
-#include <sys/time.h>
-
 #include "param.h"
 #include "commonlib.h"
 
@@ -22,18 +20,20 @@ int main(int argc, char *argv[])
     const char *server_ip = get_localhost_ip();
     const int server_port = getpid();
 
-    // listen socket
+    // set socket
     int server_socket_fd;
     if ((server_socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
     {
         perror("Server socket cannot create.");
         exit(EXIT_FAILURE);
     }
+    set_socket_timeout(server_socket_fd, SOCKET_TIMEOUT);
 
-    // set socket
+    // set address
     struct sockaddr_in server_addr;
     init_sockaddr_in(&server_addr, NULL, server_port);
 
+    // bind && listen socket
     if (bind(server_socket_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
         perrorf("Server cannot bind to %s:%d\n",
@@ -46,21 +46,6 @@ int main(int argc, char *argv[])
         perrorf("Socket cannot listen to %s:%d\n",
                 inet_ntoa(server_addr.sin_addr),
                 (int)ntohs(server_addr.sin_port));
-        exit(EXIT_FAILURE);
-    }
-
-    // set server socket timeout, it's non-block
-    struct timeval timeout;
-    timeout.tv_sec = SOCKET_TIMEOUT;
-    timeout.tv_usec = 0;
-    if (setsockopt(server_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
-    {
-        perror("Server socket cannot set receive timeout\n");
-        exit(EXIT_FAILURE);
-    }
-    if (setsockopt(server_socket_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
-    {
-        perror("Server socket cannot set send timeout\n");
         exit(EXIT_FAILURE);
     }
 
@@ -164,15 +149,8 @@ int main(int argc, char *argv[])
                         }
                         client_nids[ii] = 0; // will be set by client msg
 
-                        //set client socket unblock
-                        set_fd_unblock(client_socket_fds[ii]);
-
-                        len = snprintf(buf,
-                                       sizeof(buf),
-                                       "Welcome to this shared memory system.");
-                        buf[len] = '\0';
-
-                        protocol_write(client_socket_fds[ii], buf);
+                        //set client socket nonblock
+                        set_fd_nonblock(client_socket_fds[ii]);
                     }
 
                     unsigned offline_host = 0;
@@ -191,7 +169,7 @@ int main(int argc, char *argv[])
                             if (len > 0) // msg coming in
                             {
                                 int nid;
-                                const char *client_msg;
+                                char *client_msg, *confirm_client_msg;
 
                                 printf("Server: %s\n", buf);
 
@@ -209,20 +187,26 @@ int main(int argc, char *argv[])
                                     exit(EXIT_FAILURE);
                                 }
 
-                                if (!strcmp(CLIENT_MSG_REGISTER, client_msg)) // save the client register nid
+                                if (!strcmp(CLIENT_MSG_REGISTER, client_msg)) // save the client register nid; send confirm msg
                                 {
                                     client_nids[ii] = nid;
+                                    confirm_client_msg = generate_confirm_msg(CLIENT_MSG_REGISTER);
+                                    protocol_write(client_socket_fds[ii], confirm_client_msg);
                                 }
                                 else if (!strcmp(CLIENT_MSG_EXIT, client_msg)) // receive sm_node_exit() from nid, then server wait for all host send this
                                 {
                                     // set this offline
-
                                     close(client_socket_fds[ii]);
                                     client_socket_fds[ii] = 0;
                                 }
                                 else if (!strcmp(SERVER_MSG_BARRIER, client_msg))
                                 {
                                     ++barrier_count;
+                                }
+                                if (client_msg != confirm_client_msg) // client_msg == confirm_client_msg == NULL will course "free(): invalid next size (fast)"
+                                {
+                                    free(client_msg);
+                                    free(confirm_client_msg);
                                 }
                             }
                             else if (len < 0 && check_errno()) //no msg, continue
@@ -273,11 +257,13 @@ int main(int argc, char *argv[])
                         if (parameters->host_num == barrier_count)
                         {
                             unsigned jj;
+                            char *confirm_client_msg = generate_confirm_msg(SERVER_MSG_BARRIER);
                             for (jj = 0; jj < barrier_count; ++jj)
                             {
-                                protocol_write(client_socket_fds[jj], SERVER_MSG_UNBARRIER);
+                                protocol_write(client_socket_fds[jj], confirm_client_msg);
                             }
                             barrier_count = 0;
+                            free(confirm_client_msg);
                         }
                     }
                 }
