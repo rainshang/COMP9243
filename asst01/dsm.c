@@ -3,7 +3,7 @@
 
 int generate_client_nid(int seek)
 {
-    return 10000 + seek;
+    return seek;
 }
 
 int main(int argc, char *argv[])
