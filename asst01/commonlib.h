@@ -12,7 +12,7 @@ typedef char bool;
 #define CLIENT_CMD_REGISTER "CLIENT_CMD_REGISTER"
 #define CLIENT_CMD_EXIT "CLIENT_CMD_EXIT"
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
-#define SERVER_CMD_BARRIER "SERVER_CMD_BARRIER"
+#define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
 
 /**
  * Like perror(const char *), don't call it when no errno is set

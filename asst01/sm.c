@@ -1,7 +1,11 @@
 #include <signal.h>
+#include <stdio.h>
 
 #include "sm.h"
 #include "commonlib.h"
+#include <fcntl.h>
+
+#define PAGE_NUM 0xFFFF
 
 static int host_id;
 static int client_socket_fd;
@@ -18,22 +22,42 @@ static void sm_sigint_handler()
 
 static void sm_sigpoll_handler()
 {
-    char server_msg[BUFSIZ];
-    int len_server_msg = protocol_read(client_socket_fd, server_msg);
 
-    if (len_server_msg > 0) // msg coming in
+    size_t msg_size;
+    char *msg = protocol_read(client_socket_fd, &msg_size);
+
+    if (msg_size > 0) // msg coming in
     {
-        // printf("#%d: msg from server: %s\n", host_id, server_msg);
-        // protocol_write(client_socket_fd, generate_client_msg(host_id, server_msg));
+        char **cmd_data;
+        size_t data_size;
 
-        if (!strcmp(SERVER_MSG_EXIT_CLIENTS, server_msg)) // server notify all clients offline
+        cmd_data = parse_msg(msg, msg_size, &data_size);
+
+        if (!cmd_data)
         {
+            printf("Invalid message received.\n");
+
+            exit(EXIT_FAILURE);
+        }
+
+        if (!strcmp(SERVER_CMD_EXIT_CLIENTS, cmd_data[0])) // server notify all clients offline
+        {
+
+            free(cmd_data[0]);
+            free(cmd_data[1]);
+            free(cmd_data);
+            free(msg);
             kill(getppid(), SIGKILL);
             sm_relase();
             return;
         }
+
+        free(cmd_data[0]);
+        free(cmd_data[1]);
+        free(cmd_data);
+        free(msg);
     }
-    else if (len_server_msg < 0 && check_errno()) //no msg, continue
+    else if (msg_size < 0 && check_errno()) //no msg, continue
     {
     }
     else //len_server_msg== 0
@@ -104,22 +128,33 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
 
     // register to server with nid
-    char *msg_send = generate_client_msg(host_id, CLIENT_MSG_REGISTER);
-    protocol_write(client_socket_fd, msg_send);
-    free(msg_send);
-    char server_msg[BUFSIZ];
-    int len_server_msg = protocol_read(client_socket_fd, server_msg);
+    size_t msg_size;
+    char *cmd_data_msg = generate_msg(CLIENT_CMD_REGISTER, (char *)&host_id, sizeof(host_id), &msg_size);
+    protocol_write(client_socket_fd, cmd_data_msg, msg_size);
+    free(cmd_data_msg);
 
-    if (!len_server_msg)
+    char *msg = protocol_read(client_socket_fd, &msg_size);
+
+    if (!msg)
     {
         sm_relase();
         return -1;
     }
-    if (!is_confirm_msg(server_msg, CLIENT_MSG_REGISTER))
+
+    char **cmd_data;
+    size_t data_size;
+    cmd_data = parse_msg(msg, msg_size, &data_size);
+
+    if (!cmd_data)
     {
         sm_relase();
         return -1;
     }
+
+    free(cmd_data[0]);
+    free(cmd_data[1]);
+    free(cmd_data);
+    free(msg);
 
     struct sigaction sa;
     sa.sa_flags = 0;
@@ -139,9 +174,11 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
 
 void sm_node_exit(void)
 {
-    char *msg_send = generate_client_msg(host_id, CLIENT_MSG_EXIT);
-    protocol_write(client_socket_fd, msg_send);
-    free(msg_send);
+    size_t msg_size;
+    char *cmd_msg = generate_msg(CLIENT_CMD_EXIT, NULL, 0, &msg_size);
+    protocol_write(client_socket_fd, cmd_msg, msg_size);
+    free(cmd_msg);
+
     sm_relase();
 }
 
@@ -153,20 +190,40 @@ void *sm_malloc(size_t size)
 void sm_barrier(void)
 {
     set_fd_sync(client_socket_fd);
-    char *msg_send = generate_client_msg(host_id, SERVER_MSG_BARRIER);
-    protocol_write(client_socket_fd, msg_send);
-    free(msg_send);
+    size_t msg_size;
+    char *cmd_msg = generate_msg(CLIENT_CMD_BARRIER, NULL, 0, &msg_size);
+    protocol_write(client_socket_fd, cmd_msg, msg_size);
+    free(cmd_msg);
 
     while (true)
     {
-        char server_ms[BUFSIZ];
-        int len = protocol_read(client_socket_fd, server_ms);
-        if (len > 0)
+        char *msg = protocol_read(client_socket_fd, &msg_size);
+        if (msg_size > 0)
         {
-            if (is_confirm_msg(server_ms, SERVER_MSG_BARRIER))
+            char **cmd_data;
+            size_t data_size;
+
+            cmd_data = parse_msg(msg, msg_size, &data_size);
+            free(msg);
+
+            if (!cmd_data)
             {
+                printf("Invalid message received.\n");
+
+                exit(EXIT_FAILURE);
+            }
+
+            if (is_confirm_cmd(cmd_data[0], CLIENT_CMD_BARRIER))
+            {
+                free(cmd_data[0]);
+                free(cmd_data[1]);
+                free(cmd_data);
                 break;
             }
+            free(cmd_data[0]);
+            free(cmd_data[1]);
+            free(cmd_data);
+            break;
         }
     }
     set_fd_async(client_socket_fd);

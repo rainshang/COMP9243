@@ -216,8 +216,9 @@ char **parse_msg(const char *msg, size_t msg_size, size_t *data_size)
     char **cmd_data = malloc(sizeof(char *) * 2);
 
     unsigned len_cmd = ptr_delimiter - msg;
-    cmd_data[0] = malloc(len_cmd);
+    cmd_data[0] = malloc(len_cmd+1);
     memcpy(cmd_data[0], msg, len_cmd);
+    cmd_data[0][len_cmd] = '\0';
 
     *data_size = msg_size - len_cmd - LEN_CMD_DATA_DELIMITER;
     cmd_data[1] = malloc(*data_size);

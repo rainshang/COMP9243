@@ -1,3 +1,5 @@
+#include <sys/socket.h>
+
 #include "param.h"
 #include "commonlib.h"
 
@@ -108,7 +110,7 @@ int main(int argc, char *argv[])
             {
                 if (i < parameters->host_num)
                 {
-                    printf("In main process: %d, new process is: %d\n", getpid(), pid_ssh);
+                    // printf("In main process: %d, new process is: %d\n", getpid(), pid_ssh);
                     //sm_log_init(parameters->log_file);
 
                     if (parameters->log_file != NULL)
@@ -136,8 +138,6 @@ int main(int argc, char *argv[])
                     socklen_t sizeof_sockaddr_in = sizeof(client_addr);
 
                     unsigned ii = 0;
-                    char buf[BUFSIZ];
-                    int len;
 
                     // Accept all the connection from hosts
                     for (ii = 0; ii < parameters->host_num; ++ii)
@@ -165,51 +165,54 @@ int main(int argc, char *argv[])
                                 continue;
                             }
 
-                            len = protocol_read(client_socket_fds[ii], buf);
-                            if (len > 0) // msg coming in
+                            size_t msg_size;
+                            char *msg = protocol_read(client_socket_fds[ii], &msg_size);
+                            if (msg_size > 0) // msg coming in
                             {
-                                int nid;
-                                char *client_msg, *confirm_client_msg;
-
-                                printf("Server: %s\n", buf);
+                                char **cmd_data;
+                                size_t data_size;
 
                                 if (parameters->log_file != NULL)
                                 {
                                     sm_log_init(parameters->log_file);
-                                    LOG_PRINT("Server: %s\n", buf);
+                                    LOG_PRINT("Server: %s\n", msg);
                                     sm_log_close(parameters->log_file);
                                 }
 
-                                if (!(client_msg = split_client_msg(buf, &nid)))
+                                cmd_data = parse_msg(msg, msg_size, &data_size);
+
+                                if (!cmd_data)
                                 {
                                     printf("Invalid message received.\n");
 
                                     exit(EXIT_FAILURE);
                                 }
 
-                                if (!strcmp(CLIENT_MSG_REGISTER, client_msg)) // save the client register nid; send confirm msg
+                                if (!strcmp(CLIENT_CMD_REGISTER, cmd_data[0])) // save the client register nid; send confirm msg
                                 {
-                                    client_nids[ii] = nid;
-                                    confirm_client_msg = generate_confirm_msg(CLIENT_MSG_REGISTER);
-                                    protocol_write(client_socket_fds[ii], confirm_client_msg);
+                                    memcpy(&(client_nids[ii]), cmd_data[1], data_size);
+                                    char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
+                                    char *confirm_cmd_msg = generate_msg(confirm_cmd, NULL, 0, &msg_size);
+                                    free(confirm_cmd);
+                                    protocol_write(client_socket_fds[ii], confirm_cmd_msg, msg_size);
+                                    free(confirm_cmd_msg);
                                 }
-                                else if (!strcmp(CLIENT_MSG_EXIT, client_msg)) // receive sm_node_exit() from nid, then server wait for all host send this
+                                else if (!strcmp(CLIENT_CMD_EXIT, cmd_data[0])) // receive sm_node_exit() from nid, then server wait for all host send this
                                 {
                                     // set this offline
                                     close(client_socket_fds[ii]);
                                     client_socket_fds[ii] = 0;
                                 }
-                                else if (!strcmp(SERVER_MSG_BARRIER, client_msg))
+                                else if (!strcmp(CLIENT_CMD_BARRIER, cmd_data[0]))
                                 {
                                     ++barrier_count;
                                 }
-                                if (client_msg != confirm_client_msg) // client_msg == confirm_client_msg == NULL will course "free(): invalid next size (fast)"
-                                {
-                                    free(client_msg);
-                                    free(confirm_client_msg);
-                                }
+                                free(cmd_data[0]);
+                                free(cmd_data[1]);
+                                free(cmd_data);
+                                free(msg);
                             }
-                            else if (len < 0 && check_errno()) //no msg, continue
+                            else if (msg_size < 0 && check_errno()) //no msg, continue
                             {
                                 // sleep(10);
                                 // len = snprintf(buf,
@@ -217,7 +220,7 @@ int main(int argc, char *argv[])
                                 //                "Welcome to this shared memory system.");
                                 // buf[len] = '\0';
                             }
-                            else if (len == 0) // connection break
+                            else if (msg_size == 0) // connection break
                             {
                                 // printf("Socket seems disconnect\n");
                                 // set this offline
@@ -229,7 +232,9 @@ int main(int argc, char *argv[])
                                 {
                                     if (client_socket_fds[ii])
                                     {
-                                        protocol_write(client_socket_fds[ii], SERVER_MSG_EXIT_CLIENTS);
+                                        char *cmd_msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL, 0, &msg_size);
+                                        protocol_write(client_socket_fds[ii], cmd_msg, msg_size);
+                                        free(cmd_msg);
 
                                         close(client_socket_fds[ii]);
                                     }
@@ -257,13 +262,18 @@ int main(int argc, char *argv[])
                         if (parameters->host_num == barrier_count)
                         {
                             unsigned jj;
-                            char *confirm_client_msg = generate_confirm_msg(SERVER_MSG_BARRIER);
+
+                            size_t msg_size;
+                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BARRIER);
+                            char *confirm_cmd_msg = generate_msg(confirm_cmd, NULL, 0, &msg_size);
+                            free(confirm_cmd);
+
                             for (jj = 0; jj < barrier_count; ++jj)
                             {
-                                protocol_write(client_socket_fds[jj], confirm_client_msg);
+                                protocol_write(client_socket_fds[jj], confirm_cmd_msg, msg_size);
                             }
                             barrier_count = 0;
-                            free(confirm_client_msg);
+                            free(confirm_cmd_msg);
                         }
                     }
                 }
