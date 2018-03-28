@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
-                    while (1)
+                    while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
                         {
@@ -165,13 +165,9 @@ int main(int argc, char *argv[])
                                 continue;
                             }
 
-                            size_t msg_size;
-                            char *msg = protocol_read(client_socket_fds[ii], &msg_size);
-                            if (msg_size > 0) // msg coming in
+                            struct sm_ptr *msg = protocol_read(client_socket_fds[ii]);
+                            if (msg) // msg coming in
                             {
-                                char **cmd_data;
-                                size_t data_size;
-
                                 if (parameters->log_file != NULL)
                                 {
                                     sm_log_init(parameters->log_file);
@@ -179,48 +175,46 @@ int main(int argc, char *argv[])
                                     sm_log_close(parameters->log_file);
                                 }
 
-                                cmd_data = parse_msg(msg, msg_size, &data_size);
+                                void **cmd_data = parse_msg(msg);
 
                                 if (!cmd_data)
                                 {
+                                    free(msg->ptr);
+                                    free(msg);
                                     printf("Invalid message received.\n");
-
                                     exit(EXIT_FAILURE);
                                 }
+                                char *cmd = (char *)cmd_data[0];
+                                struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
 
-                                if (!strcmp(CLIENT_CMD_REGISTER, cmd_data[0])) // save the client register nid; send confirm msg
+                                if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
                                 {
-                                    memcpy(&(client_nids[ii]), cmd_data[1], data_size);
+                                    memcpy(&(client_nids[ii]), data->ptr, data->size);
                                     char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
-                                    char *confirm_cmd_msg = generate_msg(confirm_cmd, NULL, 0, &msg_size);
+                                    struct sm_ptr *confirm_cmd_msg = generate_msg(confirm_cmd, NULL);
                                     free(confirm_cmd);
-                                    protocol_write(client_socket_fds[ii], confirm_cmd_msg, msg_size);
+                                    protocol_write(client_socket_fds[ii], confirm_cmd_msg);
+                                    free(confirm_cmd_msg->ptr);
                                     free(confirm_cmd_msg);
                                 }
-                                else if (!strcmp(CLIENT_CMD_EXIT, cmd_data[0])) // receive sm_node_exit() from nid, then server wait for all host send this
+                                else if (!strcmp(CLIENT_CMD_EXIT, cmd)) // receive sm_node_exit() from nid, then server wait for all host send this
                                 {
                                     // set this offline
                                     close(client_socket_fds[ii]);
                                     client_socket_fds[ii] = 0;
                                 }
-                                else if (!strcmp(CLIENT_CMD_BARRIER, cmd_data[0]))
+                                else if (!strcmp(CLIENT_CMD_BARRIER, cmd))
                                 {
                                     ++barrier_count;
                                 }
-                                free(cmd_data[0]);
-                                free(cmd_data[1]);
+                                free(cmd);
+                                free(data->ptr);
+                                free(data);
                                 free(cmd_data);
+                                free(msg->ptr);
                                 free(msg);
                             }
-                            else if (msg_size < 0 && check_errno()) //no msg, continue
-                            {
-                                // sleep(10);
-                                // len = snprintf(buf,
-                                //                sizeof(buf),
-                                //                "Welcome to this shared memory system.");
-                                // buf[len] = '\0';
-                            }
-                            else if (msg_size == 0) // connection break
+                            else // connection break
                             {
                                 // printf("Socket seems disconnect\n");
                                 // set this offline
@@ -232,8 +226,9 @@ int main(int argc, char *argv[])
                                 {
                                     if (client_socket_fds[ii])
                                     {
-                                        char *cmd_msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL, 0, &msg_size);
-                                        protocol_write(client_socket_fds[ii], cmd_msg, msg_size);
+                                        struct sm_ptr *cmd_msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
+                                        protocol_write(client_socket_fds[ii], cmd_msg);
+                                        free(cmd_msg->ptr);
                                         free(cmd_msg);
 
                                         close(client_socket_fds[ii]);
@@ -263,16 +258,16 @@ int main(int argc, char *argv[])
                         {
                             unsigned jj;
 
-                            size_t msg_size;
                             char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BARRIER);
-                            char *confirm_cmd_msg = generate_msg(confirm_cmd, NULL, 0, &msg_size);
+                            struct sm_ptr *confirm_cmd_msg = generate_msg(confirm_cmd, NULL);
                             free(confirm_cmd);
 
                             for (jj = 0; jj < barrier_count; ++jj)
                             {
-                                protocol_write(client_socket_fds[jj], confirm_cmd_msg, msg_size);
+                                protocol_write(client_socket_fds[jj], confirm_cmd_msg);
                             }
                             barrier_count = 0;
+                            free(confirm_cmd_msg->ptr);
                             free(confirm_cmd_msg);
                         }
                     }

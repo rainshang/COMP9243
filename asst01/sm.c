@@ -1,9 +1,10 @@
 
 #include <stdio.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 #include "sm.h"
 #include "commonlib.h"
-#include <fcntl.h>
 
 #include <stdlib.h>
 #include <signal.h>
@@ -29,50 +30,39 @@ static void sm_sigint_handler()
 
 static void sm_sigpoll_handler()
 {
+    struct sm_ptr *msg = protocol_read(client_socket_fd);
 
-    size_t msg_size;
-    char *msg = protocol_read(client_socket_fd, &msg_size);
-
-    if (msg_size > 0) // msg coming in
+    if (msg)
     {
-        char **cmd_data;
-        size_t data_size;
-
-        cmd_data = parse_msg(msg, msg_size, &data_size);
+        void **cmd_data = parse_msg(msg);
 
         if (!cmd_data)
         {
+            free(msg->ptr);
+            free(msg);
             printf("Invalid message received.\n");
-
             exit(EXIT_FAILURE);
         }
 
-        if (!strcmp(SERVER_CMD_EXIT_CLIENTS, cmd_data[0])) // server notify all clients offline
-        {
+        char *cmd = (char *)cmd_data[0];
+        struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
 
-            free(cmd_data[0]);
-            free(cmd_data[1]);
-            free(cmd_data);
-            free(msg);
-            kill(getppid(), SIGKILL);
+        if (!strcmp(SERVER_CMD_EXIT_CLIENTS, cmd)) // server notify all clients offline
+        {
             sm_relase();
-            return;
         }
 
-        free(cmd_data[0]);
-        free(cmd_data[1]);
+        free(cmd);
+        free(data->ptr);
+        free(data);
         free(cmd_data);
+        free(msg->ptr);
         free(msg);
     }
-    else if (msg_size < 0 && check_errno()) //no msg, continue
-    {
-    }
-    else //len_server_msg== 0
+    else
     {
         printf("Cannot read from server\n");
-        kill(getppid(), SIGKILL);
         sm_relase();
-        return;
     }
 }
 
@@ -135,12 +125,22 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
 
     // register to server with nid
-    size_t msg_size;
-    char *cmd_data_msg = generate_msg(CLIENT_CMD_REGISTER, (char *)&host_id, sizeof(host_id), &msg_size);
-    protocol_write(client_socket_fd, cmd_data_msg, msg_size);
-    free(cmd_data_msg);
+    // int pagesize = getpagesize();
+    // int sm_total = pagesize * PAGE_NUM;
+    // char *sm_ptr = mmap(NULL, sm_total,
+    //                     PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+    //                     -1, 0);
+    // char *nid_smptr = ;
+    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+    data->ptr = &host_id;
+    data->size = sizeof(host_id);
+    struct sm_ptr *msg = generate_msg(CLIENT_CMD_REGISTER, data);
+    free(data);
+    protocol_write(client_socket_fd, msg);
+    free(msg->ptr);
+    free(msg);
 
-    char *msg = protocol_read(client_socket_fd, &msg_size);
+    msg = protocol_read(client_socket_fd);
 
     if (!msg)
     {
@@ -148,19 +148,24 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
         return -1;
     }
 
-    char **cmd_data;
-    size_t data_size;
-    cmd_data = parse_msg(msg, msg_size, &data_size);
+    void **cmd_data = parse_msg(msg);
 
     if (!cmd_data)
     {
+        free(msg->ptr);
+        free(msg);
         sm_relase();
         return -1;
     }
 
-    free(cmd_data[0]);
-    free(cmd_data[1]);
+    char *cmd = (char *)cmd_data[0];
+    data = (struct sm_ptr *)cmd_data[1];
+
+    free(cmd);
+    free(data->ptr);
+    free(data);
     free(cmd_data);
+    free(msg->ptr);
     free(msg);
 
     struct sigaction sa;
@@ -181,10 +186,10 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
 
 void sm_node_exit(void)
 {
-    size_t msg_size;
-    char *cmd_msg = generate_msg(CLIENT_CMD_EXIT, NULL, 0, &msg_size);
-    protocol_write(client_socket_fd, cmd_msg, msg_size);
-    free(cmd_msg);
+    struct sm_ptr *msg = generate_msg(CLIENT_CMD_EXIT, NULL);
+    protocol_write(client_socket_fd, msg);
+    free(msg->ptr);
+    free(msg);
 
     sm_relase();
 }
@@ -228,40 +233,51 @@ void *sm_malloc(size_t size)
 void sm_barrier(void)
 {
     set_fd_sync(client_socket_fd);
-    size_t msg_size;
-    char *cmd_msg = generate_msg(CLIENT_CMD_BARRIER, NULL, 0, &msg_size);
-    protocol_write(client_socket_fd, cmd_msg, msg_size);
-    free(cmd_msg);
+    struct sm_ptr *msg = generate_msg(CLIENT_CMD_BARRIER, NULL);
+    protocol_write(client_socket_fd, msg);
+    free(msg->ptr);
+    free(msg);
 
     while (true)
     {
-        char *msg = protocol_read(client_socket_fd, &msg_size);
-        if (msg_size > 0)
+        msg = protocol_read(client_socket_fd);
+        if (msg)
         {
-            char **cmd_data;
-            size_t data_size;
-
-            cmd_data = parse_msg(msg, msg_size, &data_size);
-            free(msg);
+            void **cmd_data = parse_msg(msg);
 
             if (!cmd_data)
             {
-                printf("Invalid message received.\n");
-
+                free(msg->ptr);
+                free(msg);
+                sm_relase();
                 exit(EXIT_FAILURE);
             }
 
-            if (is_confirm_cmd(cmd_data[0], CLIENT_CMD_BARRIER))
+            char *cmd = (char *)cmd_data[0];
+            struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
+
+            if (is_confirm_cmd(cmd, CLIENT_CMD_BARRIER))
             {
-                free(cmd_data[0]);
-                free(cmd_data[1]);
+                free(cmd);
+                free(data->ptr);
+                free(data);
                 free(cmd_data);
+                free(msg->ptr);
+                free(msg);
                 break;
             }
-            free(cmd_data[0]);
-            free(cmd_data[1]);
+
+            free(cmd);
+            free(data->ptr);
+            free(data);
             free(cmd_data);
-            break;
+            free(msg->ptr);
+            free(msg);
+        }
+        else
+        {
+            printf("Cannot read from server\n");
+            sm_relase();
         }
     }
     set_fd_async(client_socket_fd);
