@@ -13,7 +13,7 @@
 
 
 void show_usage(){
-    
+
     char *str = "Usage: dsm [OPTION]... EXECUTABLE-FILE NODE-OPTION...\n\
     -H HOSTFILE list of host names\n\
     -h          this usage message\n\
@@ -27,16 +27,16 @@ void show_usage(){
     processes.  The hosts on which node processes are started are given in\n\
     HOSTFILE, which defaults to `hosts'.  If the file does not exist,\n\
     'localhost' is used.";
-    
+
     printf("%s\n", str);
     exit(0);
     return;
-    
+
 }
 
 void parameters_init(Parameters *parameters)
 {
-    
+
     parameters->host_names = NULL;
     parameters->host_num = 1;
     parameters->execute_file = NULL;
@@ -51,18 +51,18 @@ void parameters_init(Parameters *parameters)
         exit(-1);
     }
     //char* temp1 = malloc(sizeof(char) * 1000);
-    
+
     parameters->node_option = temp;
 }
 
 int extract_host_names(char *file_name, Parameters *parameters)
 {
     FILE *fp;
-    
+
     int c = 0; //c为文件当前字符
     int t = 0;
     int line = 0; //行数统计
-    
+
     fp = fopen(file_name, "r");
     if (fp == NULL)
     {
@@ -70,10 +70,10 @@ int extract_host_names(char *file_name, Parameters *parameters)
         //            printf("%s\n", temp->host_name);
         //            temp ++;
         //        }
-        
+
         return 1;
     }
-    
+
     while ((c = fgetc(fp)) != EOF) //逐个读入字符直到文件结尾
     {
         if (c == '\n' && !t)
@@ -90,11 +90,11 @@ int extract_host_names(char *file_name, Parameters *parameters)
             t = 1;
         }
     }
-    
+
     Host_name *temp = malloc(sizeof(Host_name) * parameters->host_num);
-    
+
     parameters->host_names = temp;
-    
+
     int i = 0;
     temp = parameters->host_names;
     for (i = 0; i < parameters->host_num; i++)
@@ -102,9 +102,9 @@ int extract_host_names(char *file_name, Parameters *parameters)
         snprintf(temp->host_name, 10, "localhost");
         temp++;
     }
-    
+
     temp = parameters->host_names;
-    
+
     for (i = 0; i < parameters->host_num; i++)
     {
         if (fscanf(fp, "%s\n", temp->host_name) == EOF)
@@ -115,7 +115,7 @@ int extract_host_names(char *file_name, Parameters *parameters)
         }
         temp++;
     }
-    
+
     fclose(fp);
     return 0;
 }
@@ -124,30 +124,30 @@ Parameters *parse_argv(int argc, char **argv)
 {
     int index;
     int c;
-    
+
     char *host_name_file = NULL;
-    
+
     opterr = 0;
     Parameters *parameters = malloc(sizeof(Parameters));
-    
+
     parameters_init(parameters);
-    
+
     while ((c = getopt(argc, argv, "Nn:H:l:h:")) != -1)
         switch (c)
     {
         case 'H':
             host_name_file = optarg;
             break;
-            
+
         case 'n':
         case 'N':
             parameters->host_num = atoi(optarg);
             break;
-            
+
         case 'l':
             parameters->log_file = optarg;
             break;
-            
+
         case 'h':
             show_usage();
             break;
@@ -155,17 +155,17 @@ Parameters *parse_argv(int argc, char **argv)
             printf("version ......");
             break;
     }
-    
+
     index = optind;
-    
+
     parameters->execute_file = argv[index];
-    
+
     if (parameters->execute_file == NULL)
     {
         printf("'EXECUTABLE-FILE' is not given.\n");
         return (void *)0;
     }
-    
+
     index++;
     if (index < argc)
     {
@@ -181,13 +181,13 @@ Parameters *parse_argv(int argc, char **argv)
                 parameters->node_option[count++] = argv[index][i];
             }
             parameters->node_option[count++] = ' ';
-            
+
         }
     }
     //printf("======%s\n", parameters->node_option);
-    
+
     extract_host_names(host_name_file, parameters);
-    
+
     return parameters;
 }
 //log file
@@ -197,8 +197,8 @@ static FILE* fpp;
 
 int sm_log_init(char* log_filename)
 {
-    
-    
+
+
    if (strlen(log_filename) == 0)
    {
        fpp = NULL;
@@ -218,10 +218,10 @@ int sm_log_init(char* log_filename)
 
 void sm_log_close(char* log_filename)
 {
-    
+
         fclose(fpp);
         //fpp = NULL;
-    
+
 
 }
 
@@ -242,7 +242,7 @@ void sm_log_close(char* log_filename)
 // }
 void sm_log_print(char *format, ...)
 {
-   
+
    va_list ap;
    //struct timeval tv;
 

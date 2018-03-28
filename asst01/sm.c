@@ -1,9 +1,16 @@
-#include <signal.h>
+
 #include <stdio.h>
 
 #include "sm.h"
 #include "commonlib.h"
 #include <fcntl.h>
+
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/mman.h>
 
 #define PAGE_NUM 0xFFFF
 
@@ -182,9 +189,40 @@ void sm_node_exit(void)
     sm_relase();
 }
 
+void handler (int signum, siginfo_t *si, void *ctx)
+{
+    void *addr;
+    if (SIGSEGV != signum) {
+        printf ("Panic!");
+        exit (1);
+    }
+    addr = si->si_addr;       /* here we get the fault address */
+    printf ("...and the offending address is %p.\n", addr);
+    printf("read_fault\n");
+
+    mprotect (addr, 4096, PROT_READ);
+
+    exit (0);
+}
+
 void *sm_malloc(size_t size)
 {
-    return NULL;
+  struct sigaction sa;
+  sa.sa_sigaction = handler;
+  sa.sa_flags     = SA_SIGINFO;
+  sigemptyset (&sa.sa_mask);
+  sigaction (SIGSEGV, &sa, NULL);
+
+
+    char * a;
+    a = mmap (0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mprotect (a, 4096, PROT_NONE))
+        perror ("mprotect");
+    //printf("new mmap memory is %p\n," a);
+
+    return a;
+
+
 }
 
 void sm_barrier(void)

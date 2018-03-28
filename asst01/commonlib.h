@@ -13,6 +13,7 @@ typedef char bool;
 #define CLIENT_CMD_EXIT "CLIENT_CMD_EXIT"
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
 #define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
+#define READ_FAULT "READ_FAULT"
 
 /**
  * Like perror(const char *), don't call it when no errno is set
@@ -32,7 +33,7 @@ void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port);
 int protocol_write(int fd, const char *msg, size_t msg_size);
 /**
  * will check the O_NONBLOCK flag to read in an infinite loop until getting valid messages or error happening
- * 
+ *
  * return the message and the msg_size
  */
 char *protocol_read(int fd, size_t *msg_size);
