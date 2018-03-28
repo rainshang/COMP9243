@@ -155,6 +155,11 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
+                    current_request_read = -1;
+                    current_request_address_content = null;
+                    release_count = 0;
+                    invalidated_count = 0;
+                    current_request_write = -1;
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -207,6 +212,42 @@ int main(int argc, char *argv[])
                                 {
                                     ++barrier_count;
                                 }
+                                else if (!strcmp(READ_FAULT, cmd))
+                                {
+                                    current_request_read = client_socket_fds[ii];
+                                    current_request_address_content = data;
+                                    for node in write tag:
+                                        struct sm_ptr *cmd_msg = generate_msg(to releasing ownership, NULL);
+                                    // for data write tag:
+                                    //     struct sm_ptr *cmd_msg = generate_msg(give up write permission, NULL);
+                                    //     write tag clean up;
+                                }
+                                else if (!strcmp(releasing ownership, cmd))
+                                {
+                                  protocol_write(giving you read permission, current_request_read, current_request_address_content);
+
+                                }
+                                else if (!strcmp(releasing ownership to, cmd){
+                                    invalidated_count++;
+                                }
+                                else if (!strcmp(receiving read permission, cmd){
+                                    read list[].append;
+                                }
+                                else if (!strcmp(WRITE_FAULT, cmd){
+                                  for data all in read list[]:
+                                      struct sm_ptr *cmd_msg = generate_msg(to invalidated, NULL);
+
+                                  write tag =  client_nids[ii];
+                                  current_request_write = client_nids[ii];
+
+                                }
+                                else if (!strcmp(react to invalidated, cmd){
+                                  invalidated_count++;
+                                }
+
+
+
+
                                 free(cmd);
                                 free(data->ptr);
                                 free(data);
@@ -270,6 +311,13 @@ int main(int argc, char *argv[])
                             free(confirm_cmd_msg->ptr);
                             free(confirm_cmd_msg);
                         }
+
+                        if (invalidated_count == len(read list[])){
+                          protocol_write(giving you write permission, current_request_read, current_request_address_content);
+                          write tag = ;
+                          invalidated_count = 0;
+                        }
+
                     }
                 }
             }

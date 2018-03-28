@@ -46,9 +46,9 @@ int main (int argc, char *argv[])
   }
   //sm_bcast ((void **) &sharedChar, 0);
   /* Checkpoint A */
-  if (0 == nid){
-    printf ("node %d: 1st shared variable is at %p.\n", nid, *sharedChar);
-  }
+  // if (0 == nid){
+  //   printf ("node %d: 1st shared variable is at %p.\n", nid, *sharedChar);
+  // }
 
   if (0 != nid)
     printf ("node %d: Value in 1st shared variable is %d\n",
@@ -72,7 +72,7 @@ int main (int argc, char *argv[])
 	//     nid, *sharedChar2);
   // /* Checkpoint E */
 
-  sm_barrier ();
+  //sm_barrier ();
 
   sm_node_exit ();
   return 0;

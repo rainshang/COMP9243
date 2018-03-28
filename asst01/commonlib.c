@@ -241,7 +241,7 @@ void **parse_msg(const struct sm_ptr *msg)
 
 /**
  * generate a confirm(reply) cmd of one cmd, {$original_cmd}MSG_CONFIRM_SURFIX
- * 
+ *
  * remember to free
  */
 char *generate_confirm_cmd(const char *cmd)

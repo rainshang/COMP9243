@@ -27,7 +27,7 @@
 /* Register a node process with the SM allocator.
  *
  * - Returns 0 upon successful completion; otherwise, -1.
- * - Command arguments have to be passed in; all dsm-related arguments are 
+ * - Command arguments have to be passed in; all dsm-related arguments are
  *   removed, such that only the arguments for the user program remain.
  * - The number of node processes and the node identification of the current
  *   node process are returned in `nodes' and `nid', respectively.

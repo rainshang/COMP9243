@@ -17,6 +17,7 @@
 
 static int host_id;
 static int client_socket_fd;
+static int fault_time;
 
 static void sm_relase()
 {
@@ -194,6 +195,7 @@ void sm_node_exit(void)
     sm_relase();
 }
 
+
 void handler (int signum, siginfo_t *si, void *ctx)
 {
     void *addr;
@@ -202,13 +204,64 @@ void handler (int signum, siginfo_t *si, void *ctx)
         exit (1);
     }
     addr = si->si_addr;       /* here we get the fault address */
-    printf ("...and the offending address is %p.\n", addr);
-    printf("read_fault\n");
+    //printf ("...and the offending address is %p.\n", addr);
+    fault_time++;
+    if (fault_time == 1){
+      printf("read_fault\n");
 
-    mprotect (addr, 4096, PROT_READ);
+      struct sm_ptr *cmd_msg = generate_msg(READ_FAULT, addr);
+      protocol_write(client_socket_fd, cmd_msg);
+      free(cmd_msg->ptr);
+      free(cmd_msg);
+    }
+    else if (fault_time == 2){
+      printf("write_fault\n");
+      struct sm_ptr *cmd_msg = generate_msg(WRITE_FAULT, addr);
+      protocol_write(client_socket_fd, cmd_msg);
+      free(cmd_msg->ptr);
+      free(cmd_msg);
+      fault_time = 0;
+    }
+
 
     exit (0);
 }
+
+functuion receive_message(){
+    struct sm_ptr *msg = protocol_read(client_socket_fd);
+    if (msg){
+      void **cmd_data = parse_msg(msg);
+      char *cmd = (char *)cmd_data[0];
+      struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
+      if (!strcmp(to releasing ownership, cmd)){
+        if (a has read permission ){
+          mprotect(a, pagesize, PORT_READ);
+        }else if (a has not read permission ){
+          mprotect(a, pagesize, PORT_NONE);
+        }
+        struct sm_ptr *msg = generate_msg(releasing ownership, NULL);
+        protocol_write(client_socket_fd, msg);
+      }
+      else if (!strcmp(giving you read permission, cmd)){
+        mprotect(a, pagesize, PORT_READ);
+        struct sm_ptr *msg = generate_msg(receiving read permission, NULL);
+        protocol_write(client_socket_fd, msg);
+      }
+
+
+      else if (!strcmp(to invalidated, cmd)){
+        mprotect(a, pagesize, PORT_NONE);
+        struct sm_ptr *msg = generate_msg(react to invalidated, NULL);
+        protocol_write(client_socket_fd, msg);
+      }
+      else if (!strcmp(giving you write permission, cmd)){
+        mprotect(a, pagesize, PORT_WRITE);
+        struct sm_ptr *msg = generate_msg(receiving ownership, NULL);
+        protocol_write(client_socket_fd, msg);
+      }
+    }
+}
+
 
 void *sm_malloc(size_t size)
 {
@@ -226,7 +279,6 @@ void *sm_malloc(size_t size)
     //printf("new mmap memory is %p\n," a);
 
     return a;
-
 
 }
 
