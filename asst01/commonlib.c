@@ -25,6 +25,32 @@ void perrorf(const char *format, ...)
     perror("");
 }
 
+int node_printf(int nid, const char *format, ...)
+{
+    printf("#%d:", nid);
+    va_list arg_list;
+    va_start(arg_list, format);
+    vprintf(format, arg_list);
+    va_end(arg_list);
+}
+int allocator_printf(const char *format, ...)
+{
+    printf(":");
+    va_list arg_list;
+    va_start(arg_list, format);
+    vprintf(format, arg_list);
+    va_end(arg_list);
+}
+void sm_ptr_print(struct sm_ptr *smptr)
+{
+    unsigned i;
+    char *p = (char *)smptr->ptr;
+    for (i = 0; i < smptr->size; ++i)
+    {
+        printf("%c", p[i]);
+    }
+}
+
 void set_fd_block(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -248,9 +274,10 @@ char *generate_confirm_cmd(const char *cmd)
 {
     unsigned len_cmd = str_len(cmd);
     unsigned len_confirm_cmd = len_cmd + LEN_CMD_CONFIRM_SURFIX;
-    char *confirm_cmd = malloc(len_confirm_cmd);
+    char *confirm_cmd = malloc(len_confirm_cmd + 1);
     memcpy(confirm_cmd, cmd, len_cmd);
     memcpy(confirm_cmd + len_cmd, CMD_CONFIRM_SURFIX, LEN_CMD_CONFIRM_SURFIX);
+    confirm_cmd[len_confirm_cmd] = '\0';
     return confirm_cmd;
 }
 

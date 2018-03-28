@@ -7,6 +7,8 @@ typedef char bool;
 #define true 1
 #define false 0
 
+#define DEBUG false
+
 #define SOCKET_TIMEOUT 10
 
 #define CLIENT_CMD_REGISTER "CLIENT_CMD_REGISTER"
@@ -23,9 +25,15 @@ typedef struct sm_ptr
 } sm_ptr;
 
 /**
- * Like perror(const char *), don't call it when no errno is set
+ * like perror(const char *), don't call it when no errno is set
  */
 void perrorf(const char *format, ...);
+int node_printf(int nid, const char *format, ...);
+int allocator_printf(const char *format, ...);
+/**
+ * print sm_ptr as char*
+ */
+void sm_ptr_print(struct sm_ptr *smptr);
 void set_fd_block(int fd);
 void set_fd_nonblock(int fd);
 void set_fd_async(int fd);
