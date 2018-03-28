@@ -14,6 +14,14 @@ typedef char bool;
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
 #define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
 
+typedef struct sm_ptr
+{
+    void *ptr; // usually, need to free() this pointer manually
+    size_t size;
+    bool has_write_permission;
+    bool has_read_permission;
+} sm_ptr;
+
 /**
  * Like perror(const char *), don't call it when no errno is set
  */
@@ -29,27 +37,22 @@ const char *get_localhost_ip();
 void set_socket_timeout(int socket_fd, unsigned seconds);
 void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port);
 // use the 2 functions to write/read one message via socket/file/pipe etc.
-int protocol_write(int fd, const char *msg, size_t msg_size);
+int protocol_write(int fd, const struct sm_ptr *msg);
 /**
  * will check the O_NONBLOCK flag to read in an infinite loop until getting valid messages or error happening
- * 
- * return the message and the msg_size
+ * thus, it finally return the data it reads or NULL (error occours)
  */
-char *protocol_read(int fd, size_t *msg_size);
-bool check_errno();
+struct sm_ptr *protocol_read(int fd);
 /**
  * from {p_char} to '\0'
  */
 unsigned str_len(const char *p_char);
 // use the 2 functions to generate/parse message to between allocator/node
+struct sm_ptr *generate_msg(const char *cmd, const struct sm_ptr *data);
 /**
- * return the message and the msg_size
+ * return [char* cmd, sm_ptr* data]
  */
-char *generate_msg(const char *cmd, const char *data, size_t data_size, size_t *msg_size);
-/**
- * return [cmd, data] and data_size
- */
-char **parse_msg(const char *msg, size_t msg_size, size_t *data_size);
+void **parse_msg(const struct sm_ptr *msg);
 char *generate_confirm_cmd(const char *cmd);
 bool is_confirm_cmd(const char *cmd_to_check, const char *cmd);
 

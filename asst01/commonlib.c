@@ -89,19 +89,19 @@ void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port)
 }
 
 /**
- * protocol is {length of msg}{msg}, in which {length of msg} is an int
+ * protocol is {msg->size}{msg->ptr}, in which {msg->size} is an int
  */
-int protocol_write(int fd, const char *msg, size_t msg_size)
+int protocol_write(int fd, const struct sm_ptr *msg)
 {
-    uint32_t _msg_size = htonl(msg_size); // in case of value varies on different machine
-    char buf[4 + msg_size];
+    uint32_t _msg_size = htonl(msg->size); // in case of value varies on different machine
+    char buf[4 + msg->size];
     // write int to first 4 bytes
     buf[0] = (_msg_size >> 24) & 0xFF;
     buf[1] = (_msg_size >> 16) & 0xFF;
     buf[2] = (_msg_size >> 8) & 0xFF;
     buf[3] = _msg_size & 0xFF;
     // write the remaining
-    memcpy(buf + 4, msg, msg_size);
+    memcpy(buf + 4, msg->ptr, msg->size);
     return write(fd, buf, sizeof(buf));
 }
 
@@ -118,24 +118,29 @@ static int protocol_read_step_one(int fd)
 }
 
 // after read a valid size, then read that size of msg
-static char *protocol_read_step_two(int fd, size_t msg_size)
+static struct sm_ptr *protocol_read_step_two(int fd, size_t msg_size)
 {
-    char *msg = malloc(msg_size);
-    int len = read(fd, msg, msg_size);
+    char *msg_ptr = malloc(msg_size);
+    int len = read(fd, msg_ptr, msg_size);
+
+    struct sm_ptr *msg;
 
     if (len > 0)
     {
+        msg = malloc(sizeof(struct sm_ptr));
+        msg->ptr = msg_ptr;
+        msg->size = msg_size;
         return msg;
     }
     else
     {
-        free(msg);
+        free(msg_ptr);
         fprintf(stderr, "protocol_read_step_two: read msg error\n");
         exit(EXIT_FAILURE);
     }
 }
 
-char *protocol_read(int fd, size_t *msg_size)
+struct sm_ptr *protocol_read(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
     bool is_fd_block = !(flags & O_NONBLOCK);
@@ -146,7 +151,6 @@ char *protocol_read(int fd, size_t *msg_size)
         len = protocol_read_step_one(fd);
         if (len > 0)
         {
-            *msg_size = len;
             return protocol_read_step_two(fd, len);
         }
         else if (len == 0)
@@ -157,7 +161,6 @@ char *protocol_read(int fd, size_t *msg_size)
             }
             else // error
             {
-                *msg_size = len;
                 return NULL;
             }
         }
@@ -165,20 +168,21 @@ char *protocol_read(int fd, size_t *msg_size)
         {
             if (is_fd_block) // error
             {
-                *msg_size = len;
                 return NULL;
             }
             else
             {
-                continue;
+                if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN)
+                {
+                    continue;
+                }
+                else
+                {
+                    return NULL;
+                }
             }
         }
     }
-}
-
-bool check_errno()
-{
-    return errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN;
 }
 
 unsigned str_len(const char *p_char)
@@ -192,38 +196,45 @@ unsigned str_len(const char *p_char)
     return len;
 }
 
-// {cmd}${data}
-char *generate_msg(const char *cmd, const char *data, size_t data_size, size_t *msg_size)
+// {cmd}${data->ptr}
+struct sm_ptr *generate_msg(const char *cmd, const struct sm_ptr *data)
 {
     unsigned len_cmd = str_len(cmd);
-    *msg_size = len_cmd + LEN_CMD_DATA_DELIMITER + data_size;
-    char *msg = malloc(*msg_size);
+    struct sm_ptr *msg = malloc(sizeof(struct sm_ptr));
+    msg->size = len_cmd + LEN_CMD_DATA_DELIMITER + (data ? data->size : 0);
+    msg->ptr = malloc(msg->size);
 
-    memcpy(msg, cmd, len_cmd);
-    memcpy(msg + len_cmd, CMD_DATA_DELIMITER, LEN_CMD_DATA_DELIMITER);
-    memcpy(msg + len_cmd + LEN_CMD_DATA_DELIMITER, data, data_size);
+    memcpy(msg->ptr, cmd, len_cmd);
+    memcpy(msg->ptr + len_cmd, CMD_DATA_DELIMITER, LEN_CMD_DATA_DELIMITER);
+    if (data)
+    {
+        memcpy(msg->ptr + len_cmd + LEN_CMD_DATA_DELIMITER, data->ptr, data->size);
+    }
 
     return msg;
 }
 
-char **parse_msg(const char *msg, size_t msg_size, size_t *data_size)
+void **parse_msg(const struct sm_ptr *msg)
 {
-    char *ptr_delimiter = strstr(msg, CMD_DATA_DELIMITER);
+    char *ptr_delimiter = strstr(msg->ptr, CMD_DATA_DELIMITER);
     if (!ptr_delimiter)
     {
         return NULL;
     }
-    char **cmd_data = malloc(sizeof(char *) * 2);
+    void **cmd_data = malloc(sizeof(char *) + sizeof(struct sm_ptr));
 
-    unsigned len_cmd = ptr_delimiter - msg;
-    cmd_data[0] = malloc(len_cmd+1);
-    memcpy(cmd_data[0], msg, len_cmd);
-    cmd_data[0][len_cmd] = '\0';
+    unsigned len_cmd = ptr_delimiter - (char *)msg->ptr;
+    char *cmd = malloc(len_cmd + 1);
+    cmd_data[0] = cmd;
+    memcpy(cmd, msg->ptr, len_cmd);
+    cmd[len_cmd] = '\0';
 
-    *data_size = msg_size - len_cmd - LEN_CMD_DATA_DELIMITER;
-    cmd_data[1] = malloc(*data_size);
+    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+    cmd_data[1] = data;
+    data->size = msg->size - len_cmd - LEN_CMD_DATA_DELIMITER;
+    data->ptr = malloc(data->size);
     ptr_delimiter += LEN_CMD_DATA_DELIMITER;
-    memcpy(cmd_data[1], ptr_delimiter, *data_size);
+    memcpy(data->ptr, ptr_delimiter, data->size);
 
     return cmd_data;
 }
