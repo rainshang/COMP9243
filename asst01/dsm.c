@@ -52,9 +52,9 @@ int main(int argc, char *argv[])
     }
 
     // ssh
-    printf("Forking %d ssh processes to call '%s' on hosts......\n",
-           parameters->host_num,
-           parameters->execute_file);
+    allocator_printf("Forking %d ssh processes to call '%s' on hosts......\n",
+                     parameters->host_num,
+                     parameters->execute_file);
     if (parameters->log_file != NULL)
     {
         sm_log_init(parameters->log_file);
@@ -110,8 +110,8 @@ int main(int argc, char *argv[])
             {
                 if (i < parameters->host_num)
                 {
-                    // printf("In main process: %d, new process is: %d\n", getpid(), pid_ssh);
-                    //sm_log_init(parameters->log_file);
+                    // TODO add pid in manager
+                    allocator_printf("SSH process pid is %d\n", pid_ssh);
 
                     if (parameters->log_file != NULL)
                     {
@@ -119,8 +119,6 @@ int main(int argc, char *argv[])
                         LOG_PRINT("In main process: %d, new process is: %d\n", getpid(), pid_ssh); //write log
                         sm_log_close(parameters->log_file);
                     }
-
-                    // TODO add pid in manager
                 }
                 else //i == parameters->host_num
                 {
@@ -129,7 +127,7 @@ int main(int argc, char *argv[])
                      * AND
                      * to make sure fork() will not be blocked by the socket processing in main process
                      */
-                    // printf("In main process: %d\n", getpid());
+                    allocator_printf("main process pid is %d\n", getpid());
 
                     int client_socket_fds[parameters->host_num];
                     int client_nids[parameters->host_num];
@@ -155,6 +153,7 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
+                    void *aligned_sm_addr = 0; //select the max as the aligned address
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -175,13 +174,20 @@ int main(int argc, char *argv[])
                                     sm_log_close(parameters->log_file);
                                 }
 
+                                if (DEBUG)
+                                {
+                                    allocator_printf("");
+                                    sm_ptr_print(msg);
+                                    printf("\n");
+                                }
+
                                 void **cmd_data = parse_msg(msg);
+                                free(msg->ptr);
+                                free(msg);
 
                                 if (!cmd_data)
                                 {
-                                    free(msg->ptr);
-                                    free(msg);
-                                    printf("Invalid message received.\n");
+                                    allocator_printf("Invalid message received.\n");
                                     exit(EXIT_FAILURE);
                                 }
                                 char *cmd = (char *)cmd_data[0];
@@ -189,13 +195,42 @@ int main(int argc, char *argv[])
 
                                 if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
                                 {
-                                    memcpy(&(client_nids[ii]), data->ptr, data->size);
-                                    char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
-                                    struct sm_ptr *confirm_cmd_msg = generate_msg(confirm_cmd, NULL);
-                                    free(confirm_cmd);
-                                    protocol_write(client_socket_fds[ii], confirm_cmd_msg);
-                                    free(confirm_cmd_msg->ptr);
-                                    free(confirm_cmd_msg);
+                                    memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
+                                    void *sm_addr;
+                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]), sizeof(sm_addr));
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("a native sm_address is %p\n", sm_addr);
+                                    }
+                                    if (sm_addr > aligned_sm_addr)
+                                    {
+                                        aligned_sm_addr = sm_addr;
+                                    }
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("current aligned sm_address is %p\n", aligned_sm_addr);
+                                    }
+                                    if (ii == parameters->host_num - 1) //all nodes have registered
+                                    {
+                                        free(data->ptr);
+                                        free(data);
+
+                                        data = malloc(sizeof(struct sm_ptr));
+                                        data->size = sizeof(void *);
+                                        char *data_ptr = malloc(data->size);
+                                        memcpy(data_ptr, &aligned_sm_addr, sizeof(aligned_sm_addr));
+                                        data->ptr = data_ptr; // data:{void*}
+                                        char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
+                                        msg = generate_msg(confirm_cmd, data);
+                                        free(confirm_cmd);
+                                        unsigned iii;
+                                        for (iii = 0; iii < parameters->host_num; ++iii)
+                                        {
+                                            protocol_write(client_socket_fds[iii], msg);
+                                        }
+                                        free(msg->ptr);
+                                        free(msg);
+                                    }
                                 }
                                 else if (!strcmp(CLIENT_CMD_EXIT, cmd)) // receive sm_node_exit() from nid, then server wait for all host send this
                                 {
@@ -211,8 +246,6 @@ int main(int argc, char *argv[])
                                 free(data->ptr);
                                 free(data);
                                 free(cmd_data);
-                                free(msg->ptr);
-                                free(msg);
                             }
                             else // connection break
                             {
@@ -222,25 +255,24 @@ int main(int argc, char *argv[])
                                 client_socket_fds[ii] = 0;
                                 // notify the other client to exit();
 
+                                msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
                                 for (ii = 0; ii < parameters->host_num; ++ii)
                                 {
                                     if (client_socket_fds[ii])
                                     {
-                                        struct sm_ptr *cmd_msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
-                                        protocol_write(client_socket_fds[ii], cmd_msg);
-                                        free(cmd_msg->ptr);
-                                        free(cmd_msg);
-
+                                        protocol_write(client_socket_fds[ii], msg);
                                         close(client_socket_fds[ii]);
                                     }
-                                    if (parameters->log_file != NULL)
-                                    {
-                                        sm_log_close(parameters->log_file); //close log
-                                    }
-                                    sm_log_close(parameters->log_file);
-
-                                    return;
                                 }
+                                free(msg->ptr);
+                                free(msg);
+                                if (parameters->log_file != NULL)
+                                {
+                                    sm_log_close(parameters->log_file); //close log
+                                }
+                                sm_log_close(parameters->log_file);
+
+                                return;
                             }
                         }
 
@@ -259,16 +291,16 @@ int main(int argc, char *argv[])
                             unsigned jj;
 
                             char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BARRIER);
-                            struct sm_ptr *confirm_cmd_msg = generate_msg(confirm_cmd, NULL);
+                            struct sm_ptr *msg = generate_msg(confirm_cmd, NULL);
                             free(confirm_cmd);
 
                             for (jj = 0; jj < barrier_count; ++jj)
                             {
-                                protocol_write(client_socket_fds[jj], confirm_cmd_msg);
+                                protocol_write(client_socket_fds[jj], msg);
                             }
                             barrier_count = 0;
-                            free(confirm_cmd_msg->ptr);
-                            free(confirm_cmd_msg);
+                            free(msg->ptr);
+                            free(msg);
                         }
                     }
                 }
