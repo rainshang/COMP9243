@@ -18,7 +18,7 @@ sm.c
 Milestone 2
 
 commonlib.h
---when 'sm_node_init', each node calls 'mmap' to get available shared memory address(smp), then send it the allocator. Allocator selects the max one as the global shared memory start address(g_smp) and returns it to nodes to align
+--when 'sm_node_init', each node calls 'mmap' to get available shared memory address(sm_addr), then send it the allocator. Allocator selects the MINIMUM one as the global shared memory start address, then returns it to nodes. Every node re-mmap by it and should get a new smaller address (aligned by page_size), which should be same. Then send to allocator again to double check
 --when 'sm_malloc', node sends the size to malloc to allocator, allocator do 'g_smp+=size' and turns the 'g_smp' to each node one by one. Thus, every 'sm_malloc' memory will never overlap.
 --then each node calls 'sm_bcast' to broadcast its new memory, including the address, size and data. When other nodes receives it, they 'mmap' with the given address and size, then fulfill the data, like a copy. What should be noticed is that this memory should be 'mprotect(PORT_NONE)' because it is 'on other node'
 --allocator should save read permission lists(r_list) of N node ids and write permiss node id for each address
