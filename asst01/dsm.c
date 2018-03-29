@@ -154,7 +154,12 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
-                    void *aligned_sm_addr = UINTPTR_MAX; //select the minimum as the aligned address
+
+                    // shared memory management
+                    void *aligned_sm_start_addr = UINTPTR_MAX; //select the minimum as the aligned address
+                    unsigned sm_total_size;
+                    void *unmalloc_sm_addr; // current available
+
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -197,19 +202,20 @@ int main(int argc, char *argv[])
                                 if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
                                 {
                                     memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
+                                    memcpy(&sm_total_size, data->ptr + sizeof(client_nids[ii]), sizeof(sm_total_size));
                                     void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]), sizeof(sm_addr));
+                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(sm_total_size), sizeof(sm_addr));
                                     if (DEBUG)
                                     {
                                         allocator_printf("a native sm_address is %p\n", sm_addr);
                                     }
-                                    if (sm_addr < aligned_sm_addr)
+                                    if (sm_addr < aligned_sm_start_addr)
                                     {
-                                        aligned_sm_addr = sm_addr;
+                                        aligned_sm_start_addr = sm_addr;
                                     }
                                     if (DEBUG)
                                     {
-                                        allocator_printf("current aligned sm_address is %p\n", aligned_sm_addr);
+                                        allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
                                     }
                                     if (ii == parameters->host_num - 1) //all nodes have registered
                                     {
@@ -219,8 +225,8 @@ int main(int argc, char *argv[])
                                         data = malloc(sizeof(struct sm_ptr));
                                         data->size = sizeof(void *);
                                         char *data_ptr = malloc(data->size);
-                                        memcpy(data_ptr, &aligned_sm_addr, sizeof(aligned_sm_addr));
-                                        data->ptr = data_ptr; // data:{void*}
+                                        memcpy(data_ptr, &aligned_sm_start_addr, sizeof(aligned_sm_start_addr));
+                                        data->ptr = data_ptr; // data:{aligned_sm_start_addr}
                                         char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
                                         msg = generate_msg(confirm_cmd, data);
                                         free(confirm_cmd);
@@ -243,7 +249,7 @@ int main(int argc, char *argv[])
                                     }
                                     if (ii == 0)
                                     {
-                                        aligned_sm_addr = sm_addr;
+                                        aligned_sm_start_addr = sm_addr;
                                     }
 
                                     free(data->ptr);
@@ -254,13 +260,14 @@ int main(int argc, char *argv[])
                                     char *data_ptr = malloc(data->size);
                                     bool is_align_success;
 
-                                    if (aligned_sm_addr != sm_addr || ii == parameters->host_num - 1)
+                                    if (aligned_sm_start_addr != sm_addr || ii == parameters->host_num - 1)
                                     {
                                         if (ii == parameters->host_num - 1)
                                         {
                                             is_align_success = true;
+                                            unmalloc_sm_addr = aligned_sm_start_addr;
                                         }
-                                        if (aligned_sm_addr != sm_addr)
+                                        if (aligned_sm_start_addr != sm_addr)
                                         {
                                             is_align_success = false;
                                         }
