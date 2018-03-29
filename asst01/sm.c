@@ -12,6 +12,7 @@
 static int host_id;
 static int client_socket_fd;
 
+static unsigned sm_total;
 static void *aligned_sm_addr;
 
 static void sm_relase()
@@ -61,9 +62,8 @@ static void sm_sigpoll_handler()
     }
 }
 
-int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
+static int parse_param_and_connect(int *argc, char **argv[], int *nodes, int *nid)
 {
-    // parse arguments
     if (*argc < 5)
     {
         printf("Amount of argments is incomplete.\n");
@@ -112,23 +112,24 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
         perror("Cannot connect to allocator\n");
         return -1;
     }
+    return 0;
+}
 
-    // register to server with nid and available shared memeory address
-    int pagesize = getpagesize();
-    int sm_total = pagesize * PAGE_NUM;
+static int register_nid_native_sm_addr(void **sm_addr)
+{
     // let system allocate the available shared free memonry
-    void *sm_addr = mmap(NULL, sm_total,
-                         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                         -1, 0);
+    *sm_addr = mmap(NULL, sm_total,
+                    PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                    -1, 0);
     if (DEBUG)
     {
-        node_printf(host_id, "native available sm_address is %p\n", sm_addr);
+        node_printf(host_id, "native available sm_address is %p\n", *sm_addr);
     }
     struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
     data->size = sizeof(host_id) + sizeof(sm_addr);
     char *data_ptr = malloc(data->size);
     memcpy(data_ptr, &host_id, sizeof(host_id));
-    memcpy(data_ptr + sizeof(host_id), &sm_addr, sizeof(sm_addr));
+    memcpy(data_ptr + sizeof(host_id), sm_addr, sizeof(sm_addr));
     data->ptr = data_ptr; // data: {host_id}{sm_addr}
     struct sm_ptr *msg = generate_msg(CLIENT_CMD_REGISTER, data);
     free(data->ptr);
@@ -158,9 +159,9 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
 
     char *cmd = (char *)cmd_data[0];
-    data = (struct sm_ptr *)cmd_data[1]; // aligned shared memory address
-    bool is_register_success = is_confirm_cmd(cmd, CLIENT_CMD_REGISTER);
-    if (is_register_success)
+    data = (struct sm_ptr *)cmd_data[1]; // {aligned shared memory address}
+    bool is_ccm = is_confirm_cmd(cmd, CLIENT_CMD_REGISTER);
+    if (is_ccm)
     {
         memcpy(&aligned_sm_addr, data->ptr, data->size);
     }
@@ -168,7 +169,7 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     free(data->ptr);
     free(data);
     free(cmd_data);
-    if (!is_register_success)
+    if (!is_ccm)
     {
         node_printf(host_id, "Unexpected command received.\n");
         sm_relase();
@@ -176,8 +177,107 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
     if (DEBUG)
     {
-        node_printf(host_id, "aligned available sm_address is %p\n", aligned_sm_addr);
-    } // register done
+        node_printf(host_id, "first aligned available sm_address is %p\n", aligned_sm_addr);
+    }
+    return 0;
+}
+
+static int align_sm_addr(void *native_sm_addr)
+{
+    munmap(native_sm_addr, sm_total); // free the first try
+    aligned_sm_addr = mmap(aligned_sm_addr, sm_total,
+                           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                           -1, 0);
+    if (MAP_FAILED == aligned_sm_addr)
+    {
+        perror("Cannot mmap the entire shared memeory");
+        sm_relase();
+        return -1;
+    }
+
+    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+    data->size = sizeof(aligned_sm_addr);
+    char *data_ptr = malloc(data->size);
+    memcpy(data_ptr, &aligned_sm_addr, sizeof(aligned_sm_addr));
+    data->ptr = data_ptr; // data: {aligned_sm_addr}
+    struct sm_ptr *msg = generate_msg(CLIENT_CMD_ALIGN, data);
+    free(data->ptr);
+    free(data);
+    protocol_write(client_socket_fd, msg);
+    free(msg->ptr);
+    free(msg);
+
+    msg = protocol_read(client_socket_fd);
+
+    if (!msg)
+    {
+        node_printf(host_id, "cannot read from allocator\n");
+        sm_relase();
+        return -1;
+    }
+
+    void **cmd_data = parse_msg(msg);
+    free(msg->ptr);
+    free(msg);
+
+    if (!cmd_data)
+    {
+        node_printf(host_id, "Invalid message received.\n");
+        sm_relase();
+        return -1;
+    }
+
+    char *cmd = (char *)cmd_data[0];
+    data = (struct sm_ptr *)cmd_data[1]; // {bool}
+    bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_ALIGN);
+    bool is_align_success;
+    if (is_ccmd)
+    {
+        memcpy(&is_align_success, data->ptr, data->size);
+    }
+    free(cmd);
+    free(data->ptr);
+    free(data);
+    free(cmd_data);
+    if (!is_ccmd)
+    {
+        node_printf(host_id, "Unexpected command received.\n");
+        sm_relase();
+        return -1;
+    }
+    if (!is_align_success) //allocator find not same
+    {
+        munmap(aligned_sm_addr, sm_total); // free the second try
+        sm_relase();
+        return -1;
+    }
+    return 0;
+}
+
+int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
+{
+    // parse arguments
+    if (parse_param_and_connect(argc, argv, nodes, nid))
+    {
+        return -1;
+    }
+
+    int pagesize = getpagesize();
+    sm_total = pagesize * PAGE_NUM;
+
+    // register to server with nid and native available shared memeory address
+    void *native_sm_addr;
+    if (register_nid_native_sm_addr(&native_sm_addr))
+    {
+        return -1;
+    }
+    // re-mmap() the aligned sm_addr, system will aligns it slightly by page_size, then double check with allocator that all the nodes are same
+    if (align_sm_addr(native_sm_addr))
+    {
+        return -1;
+    }
+    // finally, we got a universal aligned sm_addr
+    node_printf(host_id, "final aligned available sm_address is %p\n", aligned_sm_addr);
 
     struct sigaction sa;
     sa.sa_flags = 0;

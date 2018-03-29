@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <stdint.h>
 
 #include "param.h"
 #include "commonlib.h"
@@ -153,7 +154,7 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
-                    void *aligned_sm_addr = 0; //select the max as the aligned address
+                    void *aligned_sm_addr = UINTPTR_MAX; //select the minimum as the aligned address
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -202,7 +203,7 @@ int main(int argc, char *argv[])
                                     {
                                         allocator_printf("a native sm_address is %p\n", sm_addr);
                                     }
-                                    if (sm_addr > aligned_sm_addr)
+                                    if (sm_addr < aligned_sm_addr)
                                     {
                                         aligned_sm_addr = sm_addr;
                                     }
@@ -228,6 +229,53 @@ int main(int argc, char *argv[])
                                         {
                                             protocol_write(client_socket_fds[iii], msg);
                                         }
+                                        free(msg->ptr);
+                                        free(msg);
+                                    }
+                                }
+                                else if (!strcmp(CLIENT_CMD_ALIGN, cmd)) // save the client register nid; send confirm msg
+                                {
+                                    void *sm_addr;
+                                    memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
+                                    }
+                                    if (ii == 0)
+                                    {
+                                        aligned_sm_addr = sm_addr;
+                                    }
+
+                                    free(data->ptr);
+                                    free(data);
+
+                                    data = malloc(sizeof(struct sm_ptr));
+                                    data->size = sizeof(bool);
+                                    char *data_ptr = malloc(data->size);
+                                    bool is_align_success;
+
+                                    if (aligned_sm_addr != sm_addr || ii == parameters->host_num - 1)
+                                    {
+                                        if (ii == parameters->host_num - 1)
+                                        {
+                                            is_align_success = true;
+                                        }
+                                        if (aligned_sm_addr != sm_addr)
+                                        {
+                                            is_align_success = false;
+                                        }
+
+                                        memcpy(data_ptr, &is_align_success, sizeof(is_align_success));
+                                        data->ptr = data_ptr; // data:{void*}
+                                        char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_ALIGN);
+                                        msg = generate_msg(confirm_cmd, data);
+                                        free(confirm_cmd);
+                                        unsigned iii;
+                                        for (iii = 0; iii < parameters->host_num; ++iii)
+                                        {
+                                            protocol_write(client_socket_fds[iii], msg);
+                                        }
+
                                         free(msg->ptr);
                                         free(msg);
                                     }
