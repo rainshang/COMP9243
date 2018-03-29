@@ -153,15 +153,13 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
-<<<<<<< HEAD
-                    current_request_read = -1;
-                    current_request_address_content = null;
-                    release_count = 0;
-                    invalidated_count = 0;
-                    current_request_write = -1;
-=======
-                    void *aligned_sm_addr = 0; //select the max as the aligned address
->>>>>>> 207d522c7850a63780dc4796b99d16977c374f3a
+                    void *aligned_sm_addr = 0;
+                    void *addr = 0;
+                    // current_request_read = -1;
+                    // current_request_address_content = null;
+                    // release_count = 0;
+                    // invalidated_count = 0;
+                    // current_request_write = -1;
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -182,12 +180,12 @@ int main(int argc, char *argv[])
                                     sm_log_close(parameters->log_file);
                                 }
 
-                                if (DEBUG)
-                                {
-                                    allocator_printf("");
-                                    sm_ptr_print(msg);
-                                    printf("\n");
-                                }
+                                // if (DEBUG)
+                                // {
+                                //     allocator_printf("");
+                                //     sm_ptr_print(msg);
+                                //     printf("\n");
+                                // }
 
                                 void **cmd_data = parse_msg(msg);
                                 free(msg->ptr);
@@ -252,39 +250,45 @@ int main(int argc, char *argv[])
                                 }
                                 else if (!strcmp(READ_FAULT, cmd))
                                 {
-                                    current_request_read = client_socket_fds[ii];
-                                    current_request_address_content = data;
-                                    for node in write tag:
-                                        struct sm_ptr *cmd_msg = generate_msg(to releasing ownership, NULL);
+                                  if (DEBUG)
+                                  {
+                                      allocator_printf("receive read fault from  %d\n", client_nids[ii]);
+                                  }
+
+                                  char *confirm_cmd = generate_confirm_cmd(CMD_READ_FAULT);
+                                  msg = generate_msg(confirm_cmd, data);
+                                  protocol_write(client_socket_fds[ii], msg);
+
+                                    // current_request_read = client_socket_fds[ii];
+                                    // current_request_address_content = data;
+                                    // for node in write tag:
+                                    //     struct sm_ptr *cmd_msg = generate_msg(to releasing ownership, NULL);
                                     // for data write tag:
                                     //     struct sm_ptr *cmd_msg = generate_msg(give up write permission, NULL);
                                     //     write tag clean up;
                                 }
-                                else if (!strcmp(releasing ownership, cmd))
-                                {
-                                  protocol_write(giving you read permission, current_request_read, current_request_address_content);
-
-                                }
-                                else if (!strcmp(releasing ownership to, cmd){
-                                    invalidated_count++;
-                                }
-                                else if (!strcmp(receiving read permission, cmd){
-                                    read list[].append;
-                                }
-                                else if (!strcmp(WRITE_FAULT, cmd){
-                                  for data all in read list[]:
-                                      struct sm_ptr *cmd_msg = generate_msg(to invalidated, NULL);
-
-                                  write tag =  client_nids[ii];
-                                  current_request_write = client_nids[ii];
-
-                                }
-                                else if (!strcmp(react to invalidated, cmd){
-                                  invalidated_count++;
-                                }
-
-
-
+                                // else if (!strcmp(releasing ownership, cmd))
+                                // {
+                                //   protocol_write(giving you read permission, current_request_read, current_request_address_content);
+                                //
+                                // }
+                                // else if (!strcmp(releasing ownership to, cmd){
+                                //     invalidated_count++;
+                                // }
+                                // else if (!strcmp(receiving read permission, cmd){
+                                //     read list[].append;
+                                // }
+                                // else if (!strcmp(WRITE_FAULT, cmd){
+                                //   for data all in read list[]:
+                                //       struct sm_ptr *cmd_msg = generate_msg(to invalidated, NULL);
+                                //
+                                //   write tag =  client_nids[ii];
+                                //   current_request_write = client_nids[ii];
+                                //
+                                // }
+                                // else if (!strcmp(react to invalidated, cmd){
+                                //   invalidated_count++;
+                                // }
 
                                 free(cmd);
                                 free(data->ptr);
@@ -346,12 +350,12 @@ int main(int argc, char *argv[])
                             free(msg->ptr);
                             free(msg);
                         }
-
-                        if (invalidated_count == len(read list[])){
-                          protocol_write(giving you write permission, current_request_read, current_request_address_content);
-                          write tag = ;
-                          invalidated_count = 0;
-                        }
+                        //
+                        // if (invalidated_count == len(read list[])){
+                        //   protocol_write(giving you write permission, current_request_read, current_request_address_content);
+                        //   write tag = ;
+                        //   invalidated_count = 0;
+                        // }
 
                     }
                 }

@@ -122,70 +122,70 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     }
 
     // register to server with nid and available shared memeory address
-    int pagesize = getpagesize();
-    int sm_total = pagesize * PAGE_NUM;
-    // let system allocate the available shared free memonry
-    void *sm_addr = mmap(NULL, sm_total,
-                         PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                         -1, 0);
-    if (DEBUG)
-    {
-        node_printf(host_id, "native available sm_address is %p\n", sm_addr);
-    }
-    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
-    data->size = sizeof(host_id) + sizeof(sm_addr);
-    char *data_ptr = malloc(data->size);
-    memcpy(data_ptr, &host_id, sizeof(host_id));
-    memcpy(data_ptr + sizeof(host_id), &sm_addr, sizeof(sm_addr));
-    data->ptr = data_ptr; // data: {host_id}{sm_addr}
-    struct sm_ptr *msg = generate_msg(CLIENT_CMD_REGISTER, data);
-    free(data->ptr);
-    free(data);
-    protocol_write(client_socket_fd, msg);
-    free(msg->ptr);
-    free(msg);
-
-    msg = protocol_read(client_socket_fd);
-
-    if (!msg)
-    {
-        node_printf(host_id, "cannot read from allocator\n");
-        sm_relase();
-        return -1;
-    }
-
-    void **cmd_data = parse_msg(msg);
-    free(msg->ptr);
-    free(msg);
-
-    if (!cmd_data)
-    {
-        node_printf(host_id, "Invalid message received.\n");
-        sm_relase();
-        return -1;
-    }
-
-    char *cmd = (char *)cmd_data[0];
-    data = (struct sm_ptr *)cmd_data[1]; // aligned shared memory address
-    bool is_register_success = is_confirm_cmd(cmd, CLIENT_CMD_REGISTER);
-    if (is_register_success)
-    {
-        memcpy(&aligned_sm_addr, data->ptr, data->size);
-    }
-    free(cmd);
-    free(data->ptr);
-    free(data);
-    free(cmd_data);
-    if (!is_register_success)
-    {
-        node_printf(host_id, "Unexpected command received.\n");
-        sm_relase();
-        return -1;
-    }
-    if (DEBUG)
-    {
-        node_printf(host_id, "aligned available sm_address is %p\n", aligned_sm_addr);
-    } // register done
+    // int pagesize = getpagesize();
+    // int sm_total = pagesize * PAGE_NUM;
+    // // let system allocate the available shared free memonry
+    // void *sm_addr = mmap(NULL, sm_total,
+    //                      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+    //                      -1, 0);
+    // if (DEBUG)
+    // {
+    //     node_printf(host_id, "native available sm_address is %p\n", sm_addr);
+    // }
+    // struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+    // data->size = sizeof(host_id) + sizeof(sm_addr);
+    // char *data_ptr = malloc(data->size);
+    // memcpy(data_ptr, &host_id, sizeof(host_id));
+    // memcpy(data_ptr + sizeof(host_id), &sm_addr, sizeof(sm_addr));
+    // data->ptr = data_ptr; // data: {host_id}{sm_addr}
+    // struct sm_ptr *msg = generate_msg(CLIENT_CMD_REGISTER, data);
+    // free(data->ptr);
+    // free(data);
+    // protocol_write(client_socket_fd, msg);
+    // free(msg->ptr);
+    // free(msg);
+    //
+    // msg = protocol_read(client_socket_fd);
+    //
+    // if (!msg)
+    // {
+    //     node_printf(host_id, "cannot read from allocator\n");
+    //     sm_relase();
+    //     return -1;
+    // }
+    //
+    // void **cmd_data = parse_msg(msg);
+    // free(msg->ptr);
+    // free(msg);
+    //
+    // if (!cmd_data)
+    // {
+    //     node_printf(host_id, "Invalid message received.\n");
+    //     sm_relase();
+    //     return -1;
+    // }
+    //
+    // char *cmd = (char *)cmd_data[0];
+    // data = (struct sm_ptr *)cmd_data[1]; // aligned shared memory address
+    // bool is_register_success = is_confirm_cmd(cmd, CLIENT_CMD_REGISTER);
+    // if (is_register_success)
+    // {
+    //     memcpy(&aligned_sm_addr, data->ptr, data->size);
+    // }
+    // free(cmd);
+    // free(data->ptr);
+    // free(data);
+    // free(cmd_data);
+    // if (!is_register_success)
+    // {
+    //     node_printf(host_id, "Unexpected command received.\n");
+    //     sm_relase();
+    //     return -1;
+    // }
+    // if (DEBUG)
+    // {
+    //     node_printf(host_id, "aligned available sm_address is %p\n", aligned_sm_addr);
+    // } // register done
 
     struct sigaction sa;
     sa.sa_flags = 0;
@@ -216,69 +216,106 @@ void sm_node_exit(void)
 
 void handler (int signum, siginfo_t *si, void *ctx)
 {
+    set_fd_sync(client_socket_fd);
     void *addr;
     if (SIGSEGV != signum) {
         printf ("Panic!");
         exit (1);
     }
+
     addr = si->si_addr;       /* here we get the fault address */
-    //printf ("...and the offending address is %p.\n", addr);
-    fault_time++;
-    if (fault_time == 1){
-      printf("read_fault\n");
+    //Cannot read from allocatorprintf ("...and the offending address is %p.\n", addr);
 
-      struct sm_ptr *cmd_msg = generate_msg(READ_FAULT, addr);
-      protocol_write(client_socket_fd, cmd_msg);
-      free(cmd_msg->ptr);
-      free(cmd_msg);
-    }
-    else if (fault_time == 2){
-      printf("write_fault\n");
-      struct sm_ptr *cmd_msg = generate_msg(WRITE_FAULT, addr);
-      protocol_write(client_socket_fd, cmd_msg);
-      free(cmd_msg->ptr);
-      free(cmd_msg);
-      fault_time = 0;
-    }
+      struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+      data->size = sizeof(addr);
+      char *data_ptr = malloc(data->size);
+      memcpy(data_ptr, &addr, sizeof(addr));
+      data->ptr = data_ptr;
 
+      struct sm_ptr *msg = generate_msg(READ_FAULT, data);
+      free(data->ptr);
+      free(data);
+      protocol_write(client_socket_fd, msg);
+      free(msg->ptr);
+      free(msg);
 
-    exit (0);
+      msg = protocol_read(client_socket_fd);
+      if (msg)
+      {
+          void **cmd_data = parse_msg(msg);
+          free(msg->ptr);
+          free(msg);
+
+          if (!cmd_data)
+          {
+              sm_relase();
+              exit(EXIT_FAILURE);
+          }
+
+          char *cmd = (char *)cmd_data[0];
+          data = (struct sm_ptr *)cmd_data[1];
+          if (is_confirm_cmd(cmd, CMD_READ_FAULT))
+          {
+            mprotect (addr, 4096, PROT_READ|PROT_WRITE);
+          }
+          free(cmd);
+          free(data->ptr);
+          free(data);
+          free(cmd_data);
+      }
+      else
+      {
+          node_printf(host_id, "Cannot read from server\n");
+          sm_relase();
+      }
+
+      set_fd_async(client_socket_fd);
+
+      // printf("write_fault\n");
+      // struct sm_ptr *cmd_msg = generate_msg(WRITE_FAULT, addr);
+      // protocol_write(client_socket_fd, cmd_msg);
+      // free(cmd_msg->ptr);
+      // free(cmd_msg);
+      // fault_time = 0;
+      //
+
+    //exit (0);
 }
 
-functuion receive_message(){
-    struct sm_ptr *msg = protocol_read(client_socket_fd);
-    if (msg){
-      void **cmd_data = parse_msg(msg);
-      char *cmd = (char *)cmd_data[0];
-      struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
-      if (!strcmp(to releasing ownership, cmd)){
-        if (a has read permission ){
-          mprotect(a, pagesize, PORT_READ);
-        }else if (a has not read permission ){
-          mprotect(a, pagesize, PORT_NONE);
-        }
-        struct sm_ptr *msg = generate_msg(releasing ownership, NULL);
-        protocol_write(client_socket_fd, msg);
-      }
-      else if (!strcmp(giving you read permission, cmd)){
-        mprotect(a, pagesize, PORT_READ);
-        struct sm_ptr *msg = generate_msg(receiving read permission, NULL);
-        protocol_write(client_socket_fd, msg);
-      }
-
-
-      else if (!strcmp(to invalidated, cmd)){
-        mprotect(a, pagesize, PORT_NONE);
-        struct sm_ptr *msg = generate_msg(react to invalidated, NULL);
-        protocol_write(client_socket_fd, msg);
-      }
-      else if (!strcmp(giving you write permission, cmd)){
-        mprotect(a, pagesize, PORT_WRITE);
-        struct sm_ptr *msg = generate_msg(receiving ownership, NULL);
-        protocol_write(client_socket_fd, msg);
-      }
-    }
-}
+// functuion receive_message(){
+//     struct sm_ptr *msg = protocol_read(client_socket_fd);
+//     if (msg){
+//       void **cmd_data = parse_msg(msg);
+//       char *cmd = (char *)cmd_data[0];
+//       struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
+//       if (!strcmp(to releasing ownership, cmd)){
+//         if (a has read permission ){
+//           mprotect(a, pagesize, PORT_READ);
+//         }else if (a has not read permission ){
+//           mprotect(a, pagesize, PORT_NONE);
+//         }
+//         struct sm_ptr *msg = generate_msg(releasing ownership, NULL);
+//         protocol_write(client_socket_fd, msg);
+//       }
+//       else if (!strcmp(giving you read permission, cmd)){
+//         mprotect(a, pagesize, PORT_READ);
+//         struct sm_ptr *msg = generate_msg(receiving read permission, NULL);
+//         protocol_write(client_socket_fd, msg);
+//       }
+//
+//
+//       else if (!strcmp(to invalidated, cmd)){
+//         mprotect(a, pagesize, PORT_NONE);
+//         struct sm_ptr *msg = generate_msg(react to invalidated, NULL);
+//         protocol_write(client_socket_fd, msg);
+//       }
+//       else if (!strcmp(giving you write permission, cmd)){
+//         mprotect(a, pagesize, PORT_WRITE);
+//         struct sm_ptr *msg = generate_msg(receiving ownership, NULL);
+//         protocol_write(client_socket_fd, msg);
+//       }
+//     }
+// }
 
 
 void *sm_malloc(size_t size)
@@ -289,11 +326,9 @@ void *sm_malloc(size_t size)
   sigemptyset (&sa.sa_mask);
   sigaction (SIGSEGV, &sa, NULL);
 
-
     char * a;
     a = mmap (0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (mprotect (a, 4096, PROT_NONE))
-        perror ("mprotect");
+    mprotect(a, size, PROT_NONE);
     //printf("new mmap memory is %p\n," a);
 
     return a;

@@ -7,7 +7,7 @@ typedef char bool;
 #define true 1
 #define false 0
 
-#define DEBUG false
+#define DEBUG true
 
 #define SOCKET_TIMEOUT 10
 
@@ -16,6 +16,7 @@ typedef char bool;
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
 #define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
 #define READ_FAULT "READ_FAULT"
+#define CMD_READ_FAULT "CMD_READ_FAULT"
 
 typedef struct sm_ptr
 {
