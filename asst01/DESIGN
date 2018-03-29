@@ -20,7 +20,7 @@ Milestone 2
 #import a third party verctor lib, https://github.com/rxi/vec
 
 --when 'sm_node_init', each node calls 'mmap' to get available shared memory address(sm_addr), then send it the allocator. Allocator selects the MINIMUM one as the global shared memory start address, then returns it to nodes. Every node re-mmap by it and should get a new smaller address (aligned by page_size), which should be same. Then send to allocator again to double check
---when 'sm_malloc', node sends the size to malloc to allocator, allocator do 'g_smp+=size' and turns the 'g_smp' to each node one by one. Thus, every 'sm_malloc' memory will never overlap.
+--when 'sm_malloc', node sends the size to malloc to allocator, allocator will count how many pages this malloc needs, turns the 'unmalloc_sm_addr' to each node one by one and then move cursor by pages. Thus, every 'sm_malloc' memory will never overlap. 
 --then each node calls 'sm_bcast' to broadcast its new memory, including the address, size and data. When other nodes receives it, they 'mmap' with the given address and size, then fulfill the data, like a copy. What should be noticed is that this memory should be 'mprotect(PORT_NONE)' because it is 'on other node'
 --allocator should save read permission lists(r_list) of N node ids and write permiss node id for each address
 --when read fault sigal of one address generated, get latest node id in 'r_list', release its owner ship and read permission. Old updates the data to new, then the new node gets the read permission.

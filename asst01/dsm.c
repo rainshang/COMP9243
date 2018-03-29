@@ -3,6 +3,14 @@
 
 #include "param.h"
 #include "commonlib.h"
+#include "vec.h"
+
+typedef struct sm_permission
+{
+    void *ptr; // address of each mempry sm_malloc()ed
+    bool has_read_permission_node;
+    bool has_write_permission_nodes[];
+} sm_permission;
 
 int generate_client_nid(int seek)
 {
@@ -112,7 +120,10 @@ int main(int argc, char *argv[])
                 if (i < parameters->host_num)
                 {
                     // TODO add pid in manager
-                    allocator_printf("SSH process pid is %d\n", pid_ssh);
+                    if (DEBUG)
+                    {
+                        allocator_printf("SSH process pid is %d\n", pid_ssh);
+                    }
 
                     if (parameters->log_file != NULL)
                     {
@@ -128,7 +139,10 @@ int main(int argc, char *argv[])
                      * AND
                      * to make sure fork() will not be blocked by the socket processing in main process
                      */
-                    allocator_printf("main process pid is %d\n", getpid());
+                    if (DEBUG)
+                    {
+                        allocator_printf("main process pid is %d\n", getpid());
+                    }
 
                     int client_socket_fds[parameters->host_num];
                     int client_nids[parameters->host_num];
@@ -157,8 +171,9 @@ int main(int argc, char *argv[])
 
                     // shared memory management
                     void *aligned_sm_start_addr = UINTPTR_MAX; //select the minimum as the aligned address
-                    unsigned sm_total_size;
-                    void *unmalloc_sm_addr; // current available
+                    unsigned pagesize;                         // pagesize of node machine
+                    void *unmalloc_sm_addr;                    // current available
+                    vec_void_t sm_permission_vector;           // to store all the addresses in sm
 
                     while (true)
                     {
@@ -202,9 +217,9 @@ int main(int argc, char *argv[])
                                 if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
                                 {
                                     memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
-                                    memcpy(&sm_total_size, data->ptr + sizeof(client_nids[ii]), sizeof(sm_total_size));
+                                    memcpy(&pagesize, data->ptr + sizeof(client_nids[ii]), sizeof(pagesize));
                                     void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(sm_total_size), sizeof(sm_addr));
+                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(pagesize), sizeof(sm_addr));
                                     if (DEBUG)
                                     {
                                         allocator_printf("a native sm_address is %p\n", sm_addr);
@@ -223,7 +238,7 @@ int main(int argc, char *argv[])
                                         free(data);
 
                                         data = malloc(sizeof(struct sm_ptr));
-                                        data->size = sizeof(void *);
+                                        data->size = sizeof(aligned_sm_start_addr);
                                         char *data_ptr = malloc(data->size);
                                         memcpy(data_ptr, &aligned_sm_start_addr, sizeof(aligned_sm_start_addr));
                                         data->ptr = data_ptr; // data:{aligned_sm_start_addr}
@@ -255,10 +270,10 @@ int main(int argc, char *argv[])
                                     free(data->ptr);
                                     free(data);
 
-                                    data = malloc(sizeof(struct sm_ptr));
-                                    data->size = sizeof(bool);
-                                    char *data_ptr = malloc(data->size);
                                     bool is_align_success;
+                                    data = malloc(sizeof(struct sm_ptr));
+                                    data->size = sizeof(is_align_success);
+                                    char *data_ptr = malloc(data->size);
 
                                     if (aligned_sm_start_addr != sm_addr || ii == parameters->host_num - 1)
                                     {
@@ -266,6 +281,8 @@ int main(int argc, char *argv[])
                                         {
                                             is_align_success = true;
                                             unmalloc_sm_addr = aligned_sm_start_addr;
+                                            allocator_printf("final aligned sm_address is %p\n", aligned_sm_start_addr);
+                                            vec_init(&sm_permission_vector);
                                         }
                                         if (aligned_sm_start_addr != sm_addr)
                                         {
@@ -273,7 +290,7 @@ int main(int argc, char *argv[])
                                         }
 
                                         memcpy(data_ptr, &is_align_success, sizeof(is_align_success));
-                                        data->ptr = data_ptr; // data:{void*}
+                                        data->ptr = data_ptr; // data:{is_align_success}
                                         char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_ALIGN);
                                         msg = generate_msg(confirm_cmd, data);
                                         free(confirm_cmd);
@@ -286,6 +303,44 @@ int main(int argc, char *argv[])
                                         free(msg->ptr);
                                         free(msg);
                                     }
+                                }
+                                else if (!strcmp(CLIENT_CMD_MALLOC, cmd))
+                                {
+                                    size_t size;
+                                    memcpy(&size, data->ptr, sizeof(size));
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("node apply for allocating %d bytes memory\n", size);
+                                    }
+
+                                    unsigned need_page = (size - size % pagesize) / pagesize + 1;
+                                    void *sendback_sm_addr;
+
+                                    if (unmalloc_sm_addr + pagesize * need_page < aligned_sm_start_addr + pagesize * PAGE_NUM)
+                                    {
+                                        sendback_sm_addr = unmalloc_sm_addr;
+
+                                        unmalloc_sm_addr += pagesize * need_page;
+                                    }
+                                    else // out of bounds
+                                    {
+                                        sendback_sm_addr = 0;
+                                    }
+
+                                    free(data->ptr);
+                                    free(data);
+
+                                    data = malloc(sizeof(struct sm_ptr));
+                                    data->size = sizeof(sendback_sm_addr);
+                                    char *data_ptr = malloc(data->size);
+                                    memcpy(data_ptr, &sendback_sm_addr, sizeof(sendback_sm_addr));
+                                    data->ptr = data_ptr; // data:{sendback_sm_addr}
+                                    char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_MALLOC);
+                                    msg = generate_msg(confirm_cmd, data);
+                                    free(confirm_cmd);
+                                    protocol_write(client_socket_fds[ii], msg);
+                                    free(msg->ptr);
+                                    free(msg);
                                 }
                                 else if (!strcmp(CLIENT_CMD_EXIT, cmd)) // receive sm_node_exit() from nid, then server wait for all host send this
                                 {
