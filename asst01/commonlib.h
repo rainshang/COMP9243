@@ -18,8 +18,13 @@ typedef char bool;
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
 #define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
 #define CLIENT_CMD_MALLOC "CLIENT_CMD_MALLOC"
+<<<<<<< HEAD
 #define READ_FAULT "READ_FAULT"
 #define CMD_READ_FAULT "CMD_READ_FAULT"
+=======
+#define CLIENT_CMD_BROADCAST "CLIENT_CMD_BROADCAST"
+
+>>>>>>> d77a3b9cfad3886fe28522a73ec86afbf26324c0
 typedef struct sm_ptr
 {
     void *ptr; // usually, need to free() this pointer manually

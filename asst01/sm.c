@@ -492,18 +492,24 @@ void sm_barrier(void)
     char *cmd = (char *)cmd_data[0];
     struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
 
-    if (is_confirm_cmd(cmd, CLIENT_CMD_BARRIER))
-    {
-    }
+    bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_BARRIER);
     free(cmd);
     free(data->ptr);
     free(data);
     free(cmd_data);
+
+    if (!is_ccmd)
+    {
+        node_printf(host_id, "Unexpected command received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
     set_fd_async(client_socket_fd);
 }
 
 void sm_bcast(void **addr, int root_nid)
 {
+<<<<<<< HEAD
   set_fd_sync(client_socket_fd);
 
 
@@ -516,3 +522,102 @@ void sm_bcast(void **addr, int root_nid)
 
   set_fd_async(client_socket_fd);
 }
+=======
+    set_fd_sync(client_socket_fd);
+    struct sm_ptr *data = NULL;
+    if (host_id == root_nid)
+    {
+        struct sm_ptr *smptr = NULL;
+        int i;
+        for (i = sm_addr_vector.length - 1; i > -1; --i) // theoretically, is the last one
+        {
+            smptr = (struct sm_ptr *)sm_addr_vector.data[i];
+            if (smptr->ptr == *addr)
+            {
+                break;
+            }
+        }
+
+        data = malloc(sizeof(struct sm_ptr));
+        data->size = sizeof(*addr) + sizeof(size_t);
+        char *data_ptr = malloc(data->size);
+        memcpy(data_ptr, addr, sizeof(*addr));
+        memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
+        data->ptr = data_ptr; // data: {*addr}{size}
+    }
+
+    struct sm_ptr *msg = generate_msg(CLIENT_CMD_BROADCAST, data);
+    if (data)
+    {
+        free(data->ptr);
+        free(data);
+    }
+    protocol_write(client_socket_fd, msg);
+    free(msg->ptr);
+    free(msg);
+
+    int len;
+    msg = protocol_read(client_socket_fd, &len);
+
+    if (!msg)
+    {
+        node_printf(host_id, "Cannot read from allocator\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+
+    void **cmd_data = parse_msg(msg);
+    free(msg->ptr);
+    free(msg);
+
+    if (!cmd_data)
+    {
+        node_printf(host_id, "Invalid message received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+
+    char *cmd = (char *)cmd_data[0];
+    data = (struct sm_ptr *)cmd_data[1];
+
+    bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_BROADCAST);
+    if (is_ccmd)
+    {
+        if (host_id != root_nid) //{bcast_addr}{size}, which are broadcasted from another node
+        {
+            struct sm_ptr *smptr = malloc(sizeof(struct sm_ptr));
+            void *bcast_addr;
+            memcpy(&bcast_addr, data->ptr, sizeof(void *));
+            smptr->ptr = bcast_addr;
+            memcpy(&(smptr->size), data->ptr + sizeof(void *), sizeof(size_t));
+            smptr->has_write_permission = false;
+            smptr->has_read_permission = false;
+
+            if (mprotect(bcast_addr, smptr->size, PROT_NONE))
+            {
+                node_printf(host_id, "Cannot set %p protect status\n", bcast_addr);
+                sm_relase();
+                exit(EXIT_FAILURE);
+            }
+            vec_push(&sm_addr_vector, smptr);
+            *addr = bcast_addr;
+            if (DEBUG)
+            {
+                node_printf(root_nid, "received bcast address %p\n", bcast_addr);
+            }
+        }
+    }
+    free(cmd);
+    free(data->ptr);
+    free(data);
+    free(cmd_data);
+    if (!is_ccmd)
+    {
+        node_printf(host_id, "Unexpected command received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+
+    set_fd_async(client_socket_fd);
+}
+>>>>>>> d77a3b9cfad3886fe28522a73ec86afbf26324c0
