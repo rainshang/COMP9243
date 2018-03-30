@@ -51,10 +51,14 @@ void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port);
 // use the 2 functions to write/read one message via socket/file/pipe etc.
 int protocol_write(int fd, const struct sm_ptr *msg);
 /**
- * will check the O_NONBLOCK flag to read in an infinite loop until getting valid messages or error happening
- * thus, it finally return the data it reads or NULL (error occours)
+ * 'acceptable' means, e.g. read in nonblock fd
  */
-struct sm_ptr *protocol_read(int fd);
+bool is_read_dault_acceptable();
+/**
+ * will set *len
+ * if return NULL, can call is_read_dault_acceptable(fd) or other logic to check when fd is nonblock
+ */
+struct sm_ptr *protocol_read(int fd, int *len);
 /**
  * from {p_char} to '\0'
  */
