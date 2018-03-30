@@ -280,7 +280,7 @@ void handler (int signum, siginfo_t *si, void *ctx)
     }
 
       addr = si->si_addr;       /* here we get the fault address */
-      node_printf(host_id, "%p\n", addr);
+      //node_printf(host_id, "%p\n", addr);
       struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
       data->size = sizeof(addr);
       char *data_ptr = malloc(data->size);
@@ -294,7 +294,8 @@ void handler (int signum, siginfo_t *si, void *ctx)
       free(msg->ptr);
       free(msg);
 
-      msg = protocol_read(client_socket_fd);
+      int len;
+      msg = protocol_read(client_socket_fd, &len);
       if (msg)
       {
           void **cmd_data = parse_msg(msg);
@@ -323,18 +324,8 @@ void handler (int signum, siginfo_t *si, void *ctx)
           node_printf(host_id, "Cannot read from server\n");
           sm_relase();
       }
-
       set_fd_async(client_socket_fd);
 
-      // printf("write_fault\n");
-      // struct sm_ptr *cmd_msg = generate_msg(WRITE_FAULT, addr);
-      // protocol_write(client_socket_fd, cmd_msg);
-      // free(cmd_msg->ptr);
-      // free(cmd_msg);
-      // fault_time = 0;
-      //
-
-    //exit (0);
 }
 
 int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
@@ -448,9 +439,6 @@ void *sm_malloc(size_t size)
         sm_relase();
         exit(EXIT_FAILURE);
     }
-<<<<<<< HEAD
-
-=======
     if (!allocated_ptr) //0, allocator cannot allocate
     {
         node_printf(host_id, "Cannot sm_malloc %d bytes memory\n", size);
@@ -463,7 +451,7 @@ void *sm_malloc(size_t size)
     smptr->has_write_permission = true;
     smptr->has_read_permission = true;
 
-    if (mprotect(allocated_ptr, size, PROT_READ | PROT_WRITE))
+    if (mprotect(allocated_ptr, size, PROT_WRITE|PROT_READ))
     {
         node_printf(host_id, "Cannot set %p protect status\n", allocated_ptr);
         sm_relase();
@@ -472,7 +460,6 @@ void *sm_malloc(size_t size)
     vec_push(&sm_addr_vector, smptr);
     set_fd_async(client_socket_fd);
     return allocated_ptr;
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
 }
 
 void sm_barrier(void)

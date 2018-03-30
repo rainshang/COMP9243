@@ -191,30 +191,10 @@ int main(int argc, char *argv[])
                             // TODO release
                             if (parameters->log_file != NULL)
                             {
-<<<<<<< HEAD
-                                if (parameters->log_file != NULL)
-                                {
-                                    sm_log_init(parameters->log_file);
-                                    LOG_PRINT("Server: %s\n", msg);
-                                    sm_log_close(parameters->log_file);
-                                }
-
-                                // if (DEBUG)
-                                // {
-                                //     allocator_printf("");
-                                //     sm_ptr_print(msg);
-                                //     printf("\n");
-                                // }
-
-                                void **cmd_data = parse_msg(msg);
-                                free(msg->ptr);
-                                free(msg);
-=======
                                 sm_log_close(parameters->log_file); //close log
                             }
                             return;
                         }
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
 
                         // normally read msg
                         for (ii = 0; ii < parameters->host_num; ++ii)
@@ -232,19 +212,6 @@ int main(int argc, char *argv[])
                                         sm_log_close(parameters->log_file);
                                     }
 
-<<<<<<< HEAD
-                                if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
-                                {
-                                    memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
-                                    memcpy(&pagesize, data->ptr + sizeof(client_nids[ii]), sizeof(pagesize));
-                                    void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(pagesize), sizeof(sm_addr));
-                                    // if (DEBUG)
-                                    // {
-                                    //     allocator_printf("a native sm_address is %p\n", sm_addr);
-                                    // }
-                                    if (sm_addr < aligned_sm_start_addr)
-=======
                                     if (DEBUG)
                                     {
                                         allocator_printf("#%d: ", client_nids[ii]);
@@ -257,18 +224,10 @@ int main(int argc, char *argv[])
                                     free(msg);
 
                                     if (!cmd_data)
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
                                     {
                                         allocator_printf("Invalid message received.\n");
                                         exit(EXIT_FAILURE);
                                     }
-<<<<<<< HEAD
-                                    // if (DEBUG)
-                                    // {
-                                    //     allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
-                                    // }
-                                    if (ii == parameters->host_num - 1) //all nodes have registered
-=======
                                     char *cmd = (char *)cmd_data[0];
                                     struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
 
@@ -314,7 +273,6 @@ int main(int argc, char *argv[])
                                         }
                                     }
                                     else if (!strcmp(CLIENT_CMD_ALIGN, cmd)) // save the client register nid; send confirm msg
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
                                     {
                                         void *sm_addr;
                                         memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
@@ -364,24 +322,8 @@ int main(int argc, char *argv[])
                                             free(msg->ptr);
                                             free(msg);
                                         }
-<<<<<<< HEAD
-                                        free(msg->ptr);
-                                        free(msg);
-                                    }
-                                }
-                                else if (!strcmp(CLIENT_CMD_ALIGN, cmd)) // save the client register nid; send confirm msg
-                                {
-                                    void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
-                                    // if (DEBUG)
-                                    // {
-                                    //     allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
-                                    // }
-                                    if (ii == 0)
-=======
                                     }
                                     else if (!strcmp(CLIENT_CMD_MALLOC, cmd))
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
                                     {
                                         size_t size;
                                         memcpy(&size, data->ptr, sizeof(size));
@@ -443,6 +385,20 @@ int main(int argc, char *argv[])
                                             count_barriered = 0;
                                         }
                                     }
+                                    else if (!strcmp(READ_FAULT, cmd)){
+                                      if (DEBUG) {
+                                        allocator_printf("receive read fault from : %d\n", client_nids[ii]);
+                                      }
+                                      char *confirm_cmd = generate_confirm_cmd(CMD_READ_FAULT);
+                                      msg = generate_msg(confirm_cmd, NULL);
+                                      free(confirm_cmd);
+                                      protocol_write(client_socket_fds[ii], msg);
+                                      free(msg->ptr);
+                                      free(msg);
+
+                                    }
+
+
                                     free(cmd);
                                     free(data->ptr);
                                     free(data);
@@ -461,47 +417,10 @@ int main(int argc, char *argv[])
                                     // set this offline
                                     close(client_socket_fds[ii]);
                                     client_socket_fds[ii] = 0;
-<<<<<<< HEAD
-                                }
-                                else if (!strcmp(CLIENT_CMD_BARRIER, cmd))
-                                {
-                                    ++barrier_count;
-                                }
-                                else if (!strcmp(READ_FAULT, cmd))
-                                {
-                                  if (DEBUG)
-                                  {
-                                      allocator_printf("receive read fault from  %d\n", client_nids[ii]);
-                                  }
-
-                                  char *confirm_cmd = generate_confirm_cmd(CMD_READ_FAULT);
-                                  msg = generate_msg(confirm_cmd, data);
-                                  protocol_write(client_socket_fds[ii], msg);
-
-                                }
-                                free(cmd);
-                                free(data->ptr);
-                                free(data);
-                                free(cmd_data);
-                            }
-                            else // connection break
-                            {
-                                // printf("Socket seems disconnect\n");
-                                // set this offline
-                                close(client_socket_fds[ii]);
-                                client_socket_fds[ii] = 0;
-                                // notify the other client to exit();
-
-                                msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
-                                for (ii = 0; ii < parameters->host_num; ++ii)
-                                {
-                                    if (client_socket_fds[ii])
-=======
                                     // notify the other client to exit();
 
                                     msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
                                     for (ii = 0; ii < parameters->host_num; ++ii)
->>>>>>> edc2fde8421f8d3eb4d55fdc6d62e75eaa5cf7b1
                                     {
                                         if (client_socket_fds[ii])
                                         {
