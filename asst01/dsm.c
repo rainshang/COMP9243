@@ -8,8 +8,8 @@
 typedef struct sm_permission
 {
     void *ptr; // address of each mempry sm_malloc()ed
-    bool has_read_permission_node;
-    bool has_write_permission_nodes[];
+    bool has_write_permission_node;
+    bool *has_read_permission_nodes;
 } sm_permission;
 
 int generate_client_nid(int seek)
@@ -165,15 +165,21 @@ int main(int argc, char *argv[])
                         set_fd_nonblock(client_socket_fds[ii]);
                     }
 
+                    // block cmd action counter
                     unsigned count_offline_host = 0;
                     unsigned count_barriered = 0;
                     unsigned count_registered = 0;
                     unsigned count_aligned = 0;
+                    unsigned count_bcasted = 0;
                     // shared memory management
                     void *aligned_sm_start_addr = UINTPTR_MAX; //select the minimum as the aligned address
                     unsigned pagesize;                         // pagesize of node machine
                     void *unmalloc_sm_addr;                    // current available
                     vec_void_t sm_permission_vector;           // to store all the addresses in sm
+                    // for sm_bcast
+                    int bcast_node_index;
+                    void *bcast_addr = NULL;
+                    size_t bcast_size;
 
                     while (true)
                     {
@@ -383,6 +389,62 @@ int main(int argc, char *argv[])
                                             free(msg->ptr);
                                             free(msg);
                                             count_barriered = 0;
+                                        }
+                                    }
+                                    else if (!strcmp(CLIENT_CMD_BROADCAST, cmd))
+                                    {
+                                        ++count_bcasted;
+
+                                        if (data->size > 0) //is the node who sm_malloced the address
+                                        {
+                                            bcast_node_index = ii;
+                                            memcpy(&bcast_addr, data->ptr, sizeof(bcast_addr));
+                                            memcpy(&bcast_size, data->ptr + sizeof(bcast_addr), sizeof(bcast_size));
+                                        }
+
+                                        if (count_bcasted == parameters->host_num)
+                                        {
+                                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BROADCAST);
+                                            struct sm_ptr *msg0 = generate_msg(confirm_cmd, NULL);
+                                            free(data->ptr);
+                                            free(data);
+                                            data = malloc(sizeof(struct sm_ptr));
+                                            data->size = sizeof(bcast_addr) + sizeof(bcast_size);
+                                            char *data_ptr = malloc(data->size);
+                                            memcpy(data_ptr, &bcast_addr, sizeof(bcast_addr));
+                                            memcpy(data_ptr + sizeof(bcast_addr), &bcast_size, sizeof(bcast_size));
+                                            data->ptr = data_ptr; // data:{bcast_addr}{bcast_size}
+                                            struct sm_ptr *msg1 = generate_msg(confirm_cmd, data);
+                                            free(confirm_cmd);
+                                            unsigned iii;
+                                            bool tmp[parameters->host_num];
+                                            for (iii = 0; iii < parameters->host_num; ++iii)
+                                            {
+                                                if (iii == bcast_node_index)
+                                                {
+                                                    protocol_write(client_socket_fds[iii], msg0);
+                                                }
+                                                else
+                                                {
+                                                    protocol_write(client_socket_fds[iii], msg1);
+                                                }
+                                                tmp[iii] = false;
+                                            }
+                                            struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                            smper->ptr = bcast_addr;
+                                            smper->has_write_permission_node = client_nids[bcast_node_index];
+                                            tmp[0] = true;
+                                            smper->has_read_permission_nodes = tmp;
+                                            vec_push(&sm_permission_vector, smper);
+                                            if (DEBUG)
+                                            {
+                                                allocator_printf("#%d has sm_bcasted it's address %p\n", client_nids[bcast_node_index], bcast_addr);
+                                            }
+                                            free(msg0->ptr);
+                                            free(msg0);
+                                            free(msg1->ptr);
+                                            free(msg1);
+                                            count_bcasted = 0;
                                         }
                                     }
                                     free(cmd);
