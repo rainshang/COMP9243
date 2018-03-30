@@ -154,22 +154,12 @@ int main(int argc, char *argv[])
 
                     unsigned offline_host = 0;
                     int barrier_count = 0;
-<<<<<<< HEAD
-                    void *aligned_sm_addr = 0;
-                    void *addr = 0;
-                    // current_request_read = -1;
-                    // current_request_address_content = null;
-                    // release_count = 0;
-                    // invalidated_count = 0;
-                    // current_request_write = -1;
-=======
 
                     // shared memory management
                     void *aligned_sm_start_addr = UINTPTR_MAX; //select the minimum as the aligned address
                     unsigned sm_total_size;
                     void *unmalloc_sm_addr; // current available
 
->>>>>>> 30a6a3020add3288ba3f8408387465031d5cd144
                     while (true)
                     {
                         for (ii = 0; ii < parameters->host_num; ++ii)
