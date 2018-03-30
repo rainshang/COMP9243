@@ -38,6 +38,7 @@ int main(int argc, char *argv[])
         perror("Server socket cannot create.");
         exit(EXIT_FAILURE);
     }
+    // set timeout for accept
     set_socket_timeout(server_socket_fd, SOCKET_TIMEOUT);
 
     // set address
@@ -160,15 +161,14 @@ int main(int argc, char *argv[])
                             perrorf("Socket#%d cannot accept\n", ii);
                             exit(EXIT_FAILURE);
                         }
-                        client_nids[ii] = 0; // will be set by client msg
-
-                        //set client socket nonblock
+                        client_nids[ii] = ii; // will be set by client msg
                         set_fd_nonblock(client_socket_fds[ii]);
                     }
 
-                    unsigned offline_host = 0;
-                    int barrier_count = 0;
-
+                    unsigned count_offline_host = 0;
+                    unsigned count_barriered = 0;
+                    unsigned count_registered = 0;
+                    unsigned count_aligned = 0;
                     // shared memory management
                     void *aligned_sm_start_addr = UINTPTR_MAX; //select the minimum as the aligned address
                     unsigned pagesize;                         // pagesize of node machine
@@ -177,218 +177,18 @@ int main(int argc, char *argv[])
 
                     while (true)
                     {
+                        // check offline
+                        count_offline_host = 0;
                         for (ii = 0; ii < parameters->host_num; ++ii)
                         {
                             if (!client_socket_fds[ii])
                             {
-                                ++offline_host;
-                                continue;
-                            }
-
-                            struct sm_ptr *msg = protocol_read(client_socket_fds[ii]);
-                            if (msg) // msg coming in
-                            {
-                                if (parameters->log_file != NULL)
-                                {
-                                    sm_log_init(parameters->log_file);
-                                    LOG_PRINT("Server: %s\n", msg);
-                                    sm_log_close(parameters->log_file);
-                                }
-
-                                if (DEBUG)
-                                {
-                                    allocator_printf("");
-                                    sm_ptr_print(msg);
-                                    printf("\n");
-                                }
-
-                                void **cmd_data = parse_msg(msg);
-                                free(msg->ptr);
-                                free(msg);
-
-                                if (!cmd_data)
-                                {
-                                    allocator_printf("Invalid message received.\n");
-                                    exit(EXIT_FAILURE);
-                                }
-                                char *cmd = (char *)cmd_data[0];
-                                struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
-
-                                if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
-                                {
-                                    memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
-                                    memcpy(&pagesize, data->ptr + sizeof(client_nids[ii]), sizeof(pagesize));
-                                    void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(pagesize), sizeof(sm_addr));
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("a native sm_address is %p\n", sm_addr);
-                                    }
-                                    if (sm_addr < aligned_sm_start_addr)
-                                    {
-                                        aligned_sm_start_addr = sm_addr;
-                                    }
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
-                                    }
-                                    if (ii == parameters->host_num - 1) //all nodes have registered
-                                    {
-                                        free(data->ptr);
-                                        free(data);
-
-                                        data = malloc(sizeof(struct sm_ptr));
-                                        data->size = sizeof(aligned_sm_start_addr);
-                                        char *data_ptr = malloc(data->size);
-                                        memcpy(data_ptr, &aligned_sm_start_addr, sizeof(aligned_sm_start_addr));
-                                        data->ptr = data_ptr; // data:{aligned_sm_start_addr}
-                                        char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
-                                        msg = generate_msg(confirm_cmd, data);
-                                        free(confirm_cmd);
-                                        unsigned iii;
-                                        for (iii = 0; iii < parameters->host_num; ++iii)
-                                        {
-                                            protocol_write(client_socket_fds[iii], msg);
-                                        }
-                                        free(msg->ptr);
-                                        free(msg);
-                                    }
-                                }
-                                else if (!strcmp(CLIENT_CMD_ALIGN, cmd)) // save the client register nid; send confirm msg
-                                {
-                                    void *sm_addr;
-                                    memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
-                                    }
-                                    if (ii == 0)
-                                    {
-                                        aligned_sm_start_addr = sm_addr;
-                                    }
-
-                                    free(data->ptr);
-                                    free(data);
-
-                                    bool is_align_success;
-                                    data = malloc(sizeof(struct sm_ptr));
-                                    data->size = sizeof(is_align_success);
-                                    char *data_ptr = malloc(data->size);
-
-                                    if (aligned_sm_start_addr != sm_addr || ii == parameters->host_num - 1)
-                                    {
-                                        if (ii == parameters->host_num - 1)
-                                        {
-                                            is_align_success = true;
-                                            unmalloc_sm_addr = aligned_sm_start_addr;
-                                            allocator_printf("final aligned sm_address is %p\n", aligned_sm_start_addr);
-                                            vec_init(&sm_permission_vector);
-                                        }
-                                        if (aligned_sm_start_addr != sm_addr)
-                                        {
-                                            is_align_success = false;
-                                        }
-
-                                        memcpy(data_ptr, &is_align_success, sizeof(is_align_success));
-                                        data->ptr = data_ptr; // data:{is_align_success}
-                                        char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_ALIGN);
-                                        msg = generate_msg(confirm_cmd, data);
-                                        free(confirm_cmd);
-                                        unsigned iii;
-                                        for (iii = 0; iii < parameters->host_num; ++iii)
-                                        {
-                                            protocol_write(client_socket_fds[iii], msg);
-                                        }
-
-                                        free(msg->ptr);
-                                        free(msg);
-                                    }
-                                }
-                                else if (!strcmp(CLIENT_CMD_MALLOC, cmd))
-                                {
-                                    size_t size;
-                                    memcpy(&size, data->ptr, sizeof(size));
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("node apply for allocating %d bytes memory\n", size);
-                                    }
-
-                                    unsigned need_page = (size - size % pagesize) / pagesize + 1;
-                                    void *sendback_sm_addr;
-
-                                    if (unmalloc_sm_addr + pagesize * need_page < aligned_sm_start_addr + pagesize * PAGE_NUM)
-                                    {
-                                        sendback_sm_addr = unmalloc_sm_addr;
-
-                                        unmalloc_sm_addr += pagesize * need_page;
-                                    }
-                                    else // out of bounds
-                                    {
-                                        sendback_sm_addr = 0;
-                                    }
-
-                                    free(data->ptr);
-                                    free(data);
-
-                                    data = malloc(sizeof(struct sm_ptr));
-                                    data->size = sizeof(sendback_sm_addr);
-                                    char *data_ptr = malloc(data->size);
-                                    memcpy(data_ptr, &sendback_sm_addr, sizeof(sendback_sm_addr));
-                                    data->ptr = data_ptr; // data:{sendback_sm_addr}
-                                    char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_MALLOC);
-                                    msg = generate_msg(confirm_cmd, data);
-                                    free(confirm_cmd);
-                                    protocol_write(client_socket_fds[ii], msg);
-                                    free(msg->ptr);
-                                    free(msg);
-                                }
-                                else if (!strcmp(CLIENT_CMD_EXIT, cmd)) // receive sm_node_exit() from nid, then server wait for all host send this
-                                {
-                                    // set this offline
-                                    close(client_socket_fds[ii]);
-                                    client_socket_fds[ii] = 0;
-                                }
-                                else if (!strcmp(CLIENT_CMD_BARRIER, cmd))
-                                {
-                                    ++barrier_count;
-                                }
-                                free(cmd);
-                                free(data->ptr);
-                                free(data);
-                                free(cmd_data);
-                            }
-                            else // connection break
-                            {
-                                // printf("Socket seems disconnect\n");
-                                // set this offline
-                                close(client_socket_fds[ii]);
-                                client_socket_fds[ii] = 0;
-                                // notify the other client to exit();
-
-                                msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
-                                for (ii = 0; ii < parameters->host_num; ++ii)
-                                {
-                                    if (client_socket_fds[ii])
-                                    {
-                                        protocol_write(client_socket_fds[ii], msg);
-                                        close(client_socket_fds[ii]);
-                                    }
-                                }
-                                free(msg->ptr);
-                                free(msg);
-                                if (parameters->log_file != NULL)
-                                {
-                                    sm_log_close(parameters->log_file); //close log
-                                }
-                                sm_log_close(parameters->log_file);
-
-                                return;
+                                ++count_offline_host;
                             }
                         }
-
-                        if (offline_host >= parameters->host_num) // all the host offline
+                        if (count_offline_host == parameters->host_num) // all the host offline
                         {
-
+                            // TODO release
                             if (parameters->log_file != NULL)
                             {
                                 sm_log_close(parameters->log_file); //close log
@@ -396,21 +196,234 @@ int main(int argc, char *argv[])
                             return;
                         }
 
-                        if (parameters->host_num == barrier_count)
+                        // normally read msg
+                        for (ii = 0; ii < parameters->host_num; ++ii)
                         {
-                            unsigned jj;
-
-                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BARRIER);
-                            struct sm_ptr *msg = generate_msg(confirm_cmd, NULL);
-                            free(confirm_cmd);
-
-                            for (jj = 0; jj < barrier_count; ++jj)
+                            if (client_socket_fds[ii])
                             {
-                                protocol_write(client_socket_fds[jj], msg);
+                                int len;
+                                struct sm_ptr *msg = protocol_read(client_socket_fds[ii], &len);
+                                if (msg) // msg coming in
+                                {
+                                    if (parameters->log_file != NULL)
+                                    {
+                                        sm_log_init(parameters->log_file);
+                                        LOG_PRINT("Server: %s\n", msg);
+                                        sm_log_close(parameters->log_file);
+                                    }
+
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("#%d: ", client_nids[ii]);
+                                        sm_ptr_print(msg);
+                                        printf("\n");
+                                    }
+
+                                    void **cmd_data = parse_msg(msg);
+                                    free(msg->ptr);
+                                    free(msg);
+
+                                    if (!cmd_data)
+                                    {
+                                        allocator_printf("Invalid message received.\n");
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    char *cmd = (char *)cmd_data[0];
+                                    struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
+
+                                    if (!strcmp(CLIENT_CMD_REGISTER, cmd)) // save the client register nid; send confirm msg
+                                    {
+                                        memcpy(&(client_nids[ii]), data->ptr, sizeof(client_nids[ii]));
+                                        memcpy(&pagesize, data->ptr + sizeof(client_nids[ii]), sizeof(pagesize));
+                                        void *sm_addr;
+                                        memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(pagesize), sizeof(sm_addr));
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("a native sm_address is %p\n", sm_addr);
+                                        }
+                                        if (sm_addr < aligned_sm_start_addr)
+                                        {
+                                            aligned_sm_start_addr = sm_addr;
+                                        }
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
+                                        }
+                                        ++count_registered;
+                                        if (count_registered == parameters->host_num) //all nodes have registered
+                                        {
+                                            free(data->ptr);
+                                            free(data);
+
+                                            data = malloc(sizeof(struct sm_ptr));
+                                            data->size = sizeof(aligned_sm_start_addr);
+                                            char *data_ptr = malloc(data->size);
+                                            memcpy(data_ptr, &aligned_sm_start_addr, sizeof(aligned_sm_start_addr));
+                                            data->ptr = data_ptr; // data:{aligned_sm_start_addr}
+                                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_REGISTER);
+                                            msg = generate_msg(confirm_cmd, data);
+                                            free(confirm_cmd);
+                                            unsigned iii;
+                                            for (iii = 0; iii < parameters->host_num; ++iii)
+                                            {
+                                                protocol_write(client_socket_fds[iii], msg);
+                                            }
+                                            free(msg->ptr);
+                                            free(msg);
+                                        }
+                                    }
+                                    else if (!strcmp(CLIENT_CMD_ALIGN, cmd)) // save the client register nid; send confirm msg
+                                    {
+                                        void *sm_addr;
+                                        memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
+                                        }
+                                        if (count_aligned == 0)
+                                        {
+                                            aligned_sm_start_addr = sm_addr;
+                                        }
+                                        ++count_aligned;
+
+                                        if (aligned_sm_start_addr != sm_addr || count_aligned == parameters->host_num)
+                                        {
+                                            free(data->ptr);
+                                            free(data);
+
+                                            bool is_align_success;
+                                            data = malloc(sizeof(struct sm_ptr));
+                                            data->size = sizeof(is_align_success);
+                                            char *data_ptr = malloc(data->size);
+
+                                            if (aligned_sm_start_addr != sm_addr)
+                                            {
+                                                is_align_success = false;
+                                            }
+                                            else if (count_aligned == parameters->host_num)
+                                            {
+                                                is_align_success = true;
+                                                unmalloc_sm_addr = aligned_sm_start_addr;
+                                                allocator_printf("final aligned sm_address is %p\n", aligned_sm_start_addr);
+                                                vec_init(&sm_permission_vector);
+                                            }
+
+                                            memcpy(data_ptr, &is_align_success, sizeof(is_align_success));
+                                            data->ptr = data_ptr; // data:{is_align_success}
+                                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_ALIGN);
+                                            msg = generate_msg(confirm_cmd, data);
+                                            free(confirm_cmd);
+                                            unsigned iii;
+                                            for (iii = 0; iii < parameters->host_num; ++iii)
+                                            {
+                                                protocol_write(client_socket_fds[iii], msg);
+                                            }
+
+                                            free(msg->ptr);
+                                            free(msg);
+                                        }
+                                    }
+                                    else if (!strcmp(CLIENT_CMD_MALLOC, cmd))
+                                    {
+                                        size_t size;
+                                        memcpy(&size, data->ptr, sizeof(size));
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("node apply for allocating %d bytes memory\n", size);
+                                        }
+
+                                        unsigned need_page = (size - size % pagesize) / pagesize + 1;
+                                        void *sendback_sm_addr;
+
+                                        if (unmalloc_sm_addr + pagesize * need_page < aligned_sm_start_addr + pagesize * PAGE_NUM)
+                                        {
+                                            sendback_sm_addr = unmalloc_sm_addr;
+                                            unmalloc_sm_addr += pagesize * need_page;
+                                        }
+                                        else // out of bounds
+                                        {
+                                            sendback_sm_addr = 0;
+                                        }
+
+                                        free(data->ptr);
+                                        free(data);
+
+                                        data = malloc(sizeof(struct sm_ptr));
+                                        data->size = sizeof(sendback_sm_addr);
+                                        char *data_ptr = malloc(data->size);
+                                        memcpy(data_ptr, &sendback_sm_addr, sizeof(sendback_sm_addr));
+                                        data->ptr = data_ptr; // data:{sendback_sm_addr}
+                                        char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_MALLOC);
+                                        msg = generate_msg(confirm_cmd, data);
+                                        free(confirm_cmd);
+                                        protocol_write(client_socket_fds[ii], msg);
+                                        free(msg->ptr);
+                                        free(msg);
+                                    }
+                                    else if (!strcmp(CLIENT_CMD_EXIT, cmd)) // receive sm_node_exit() from nid, then server wait for all host send this
+                                    {
+                                        // set this offline
+                                        close(client_socket_fds[ii]);
+                                        client_socket_fds[ii] = 0;
+                                    }
+                                    else if (!strcmp(CLIENT_CMD_BARRIER, cmd))
+                                    {
+                                        ++count_barriered;
+
+                                        if (count_barriered == parameters->host_num)
+                                        {
+                                            char *confirm_cmd = generate_confirm_cmd(CLIENT_CMD_BARRIER);
+                                            msg = generate_msg(confirm_cmd, NULL);
+                                            free(confirm_cmd);
+                                            unsigned iii;
+                                            for (iii = 0; iii < parameters->host_num; ++iii)
+                                            {
+                                                protocol_write(client_socket_fds[iii], msg);
+                                            }
+                                            free(msg->ptr);
+                                            free(msg);
+                                            count_barriered = 0;
+                                        }
+                                    }
+                                    free(cmd);
+                                    free(data->ptr);
+                                    free(data);
+                                    free(cmd_data);
+                                }
+                                else if (len != 0 && is_read_dault_acceptable())
+                                {
+                                    // continue
+                                }
+                                else // connection break
+                                {
+                                    if (DEBUG)
+                                    {
+                                        allocator_printf("#%d: disconnected\n", client_nids[ii]);
+                                    }
+                                    // set this offline
+                                    close(client_socket_fds[ii]);
+                                    client_socket_fds[ii] = 0;
+                                    // notify the other client to exit();
+
+                                    msg = generate_msg(SERVER_CMD_EXIT_CLIENTS, NULL);
+                                    for (ii = 0; ii < parameters->host_num; ++ii)
+                                    {
+                                        if (client_socket_fds[ii])
+                                        {
+                                            protocol_write(client_socket_fds[ii], msg);
+                                            close(client_socket_fds[ii]);
+                                        }
+                                    }
+                                    free(msg->ptr);
+                                    free(msg);
+                                    if (parameters->log_file != NULL)
+                                    {
+                                        sm_log_close(parameters->log_file); //close log
+                                    }
+                                    sm_log_close(parameters->log_file);
+                                    return;
+                                }
                             }
-                            barrier_count = 0;
-                            free(msg->ptr);
-                            free(msg);
                         }
                     }
                 }

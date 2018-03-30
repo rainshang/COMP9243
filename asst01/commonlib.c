@@ -27,7 +27,7 @@ void perrorf(const char *format, ...)
 
 int node_printf(int nid, const char *format, ...)
 {
-    printf("#%d:", nid);
+    printf("#%d: ", nid);
     va_list arg_list;
     va_start(arg_list, format);
     vprintf(format, arg_list);
@@ -35,7 +35,7 @@ int node_printf(int nid, const char *format, ...)
 }
 int allocator_printf(const char *format, ...)
 {
-    printf(":");
+    printf(": ");
     va_list arg_list;
     va_start(arg_list, format);
     vprintf(format, arg_list);
@@ -149,11 +149,9 @@ static struct sm_ptr *protocol_read_step_two(int fd, size_t msg_size)
     char *msg_ptr = malloc(msg_size);
     int len = read(fd, msg_ptr, msg_size);
 
-    struct sm_ptr *msg;
-
     if (len > 0)
     {
-        msg = malloc(sizeof(struct sm_ptr));
+        struct sm_ptr *msg = malloc(sizeof(struct sm_ptr));
         msg->ptr = msg_ptr;
         msg->size = msg_size;
         return msg;
@@ -162,52 +160,25 @@ static struct sm_ptr *protocol_read_step_two(int fd, size_t msg_size)
     {
         free(msg_ptr);
         fprintf(stderr, "protocol_read_step_two: read msg error\n");
-        exit(EXIT_FAILURE);
+        return NULL;
     }
 }
 
-struct sm_ptr *protocol_read(int fd)
+bool is_read_dault_acceptable()
 {
-    int flags = fcntl(fd, F_GETFL, 0);
-    bool is_fd_block = !(flags & O_NONBLOCK);
+    return errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN;
+}
 
-    int len;
-    while (true)
+struct sm_ptr *protocol_read(int fd, int *len)
+{
+    *len = protocol_read_step_one(fd);
+    if (*len > 0)
     {
-        len = protocol_read_step_one(fd);
-        if (len > 0)
-        {
-            return protocol_read_step_two(fd, len);
-        }
-        else if (len == 0)
-        {
-            if (is_fd_block)
-            {
-                continue;
-            }
-            else // error
-            {
-                return NULL;
-            }
-        }
-        else
-        {
-            if (is_fd_block) // error
-            {
-                return NULL;
-            }
-            else
-            {
-                if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN)
-                {
-                    continue;
-                }
-                else
-                {
-                    return NULL;
-                }
-            }
-        }
+        return protocol_read_step_two(fd, *len);
+    }
+    else
+    {
+        return NULL;
     }
 }
 

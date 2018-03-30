@@ -32,7 +32,8 @@ static void sm_sigint_handler()
 
 static void sm_sigpoll_handler()
 {
-    struct sm_ptr *msg = protocol_read(client_socket_fd);
+    int len;
+    struct sm_ptr *msg = protocol_read(client_socket_fd, &len);
 
     if (msg)
     {
@@ -146,7 +147,8 @@ static int register_node(void **native_sm_addr, void **aligned_sm_addr)
     free(msg->ptr);
     free(msg);
 
-    msg = protocol_read(client_socket_fd);
+    int len;
+    msg = protocol_read(client_socket_fd, &len);
 
     if (!msg)
     {
@@ -217,7 +219,8 @@ static int align_smaddr(void *native_sm_addr, void **aligned_sm_addr)
     free(msg->ptr);
     free(msg);
 
-    msg = protocol_read(client_socket_fd);
+    int len;
+    msg = protocol_read(client_socket_fd, &len);
 
     if (!msg)
     {
@@ -328,68 +331,67 @@ void *sm_malloc(size_t size)
     free(msg->ptr);
     free(msg);
 
-    msg = protocol_read(client_socket_fd);
+    int len;
+    msg = protocol_read(client_socket_fd, &len);
 
-    if (msg)
+    if (!msg)
     {
-        void **cmd_data = parse_msg(msg);
-        free(msg->ptr);
-        free(msg);
-
-        if (!cmd_data)
-        {
-            node_printf(host_id, "Invalid message received.\n");
-            sm_relase();
-            exit(EXIT_FAILURE);
-        }
-
-        char *cmd = (char *)cmd_data[0];
-        struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
-
-        bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_MALLOC);
-        void *allocated_ptr;
-        if (is_ccmd)
-        {
-            memcpy(&allocated_ptr, data->ptr, data->size);
-        }
-        free(cmd);
-        free(data->ptr);
-        free(data);
-        free(cmd_data);
-        if (!is_ccmd)
-        {
-            node_printf(host_id, "Unexpected command received.\n");
-            sm_relase();
-            exit(EXIT_FAILURE);
-        }
-        if (!allocated_ptr) //0, allocator cannot allocate
-        {
-            node_printf(host_id, "Cannot sm_malloc %d bytes memory\n", size);
-            return NULL;
-        }
-
-        struct sm_ptr *smptr = malloc(sizeof(struct sm_ptr));
-        smptr->ptr = allocated_ptr;
-        smptr->size = size;
-        smptr->has_write_permission = true;
-        smptr->has_read_permission = true;
-
-        if (mprotect(allocated_ptr, size, PROT_READ | PROT_WRITE))
-        {
-            node_printf(host_id, "Cannot set %p protect status\n", allocated_ptr);
-            sm_relase();
-            exit(EXIT_FAILURE);
-        }
-        vec_push(&sm_addr_vector, smptr);
-        set_fd_async(client_socket_fd);
-        return allocated_ptr;
-    }
-    else
-    {
-        node_printf(host_id, "Cannot read from server\n");
+        node_printf(host_id, "Cannot read from allocator\n");
         sm_relase();
         exit(EXIT_FAILURE);
     }
+
+    void **cmd_data = parse_msg(msg);
+    free(msg->ptr);
+    free(msg);
+
+    if (!cmd_data)
+    {
+        node_printf(host_id, "Invalid message received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+
+    char *cmd = (char *)cmd_data[0];
+    data = (struct sm_ptr *)cmd_data[1];
+
+    bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_MALLOC);
+    void *allocated_ptr;
+    if (is_ccmd)
+    {
+        memcpy(&allocated_ptr, data->ptr, data->size);
+    }
+    free(cmd);
+    free(data->ptr);
+    free(data);
+    free(cmd_data);
+    if (!is_ccmd)
+    {
+        node_printf(host_id, "Unexpected command received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+    if (!allocated_ptr) //0, allocator cannot allocate
+    {
+        node_printf(host_id, "Cannot sm_malloc %d bytes memory\n", size);
+        return NULL;
+    }
+
+    struct sm_ptr *smptr = malloc(sizeof(struct sm_ptr));
+    smptr->ptr = allocated_ptr;
+    smptr->size = size;
+    smptr->has_write_permission = true;
+    smptr->has_read_permission = true;
+
+    if (mprotect(allocated_ptr, size, PROT_READ | PROT_WRITE))
+    {
+        node_printf(host_id, "Cannot set %p protect status\n", allocated_ptr);
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+    vec_push(&sm_addr_vector, smptr);
+    set_fd_async(client_socket_fd);
+    return allocated_ptr;
 }
 
 void sm_barrier(void)
@@ -400,37 +402,36 @@ void sm_barrier(void)
     free(msg->ptr);
     free(msg);
 
-    msg = protocol_read(client_socket_fd);
-    if (msg)
+    int len;
+    msg = protocol_read(client_socket_fd, &len);
+    if (!msg)
     {
-        void **cmd_data = parse_msg(msg);
-        free(msg->ptr);
-        free(msg);
-
-        if (!cmd_data)
-        {
-            sm_relase();
-            exit(EXIT_FAILURE);
-        }
-
-        char *cmd = (char *)cmd_data[0];
-        struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
-
-        if (is_confirm_cmd(cmd, CLIENT_CMD_BARRIER))
-        {
-        }
-        free(cmd);
-        free(data->ptr);
-        free(data);
-        free(cmd_data);
-        set_fd_async(client_socket_fd);
-    }
-    else
-    {
-        node_printf(host_id, "Cannot read from server\n");
+        node_printf(host_id, "Cannot read from allocator\n");
         sm_relase();
         exit(EXIT_FAILURE);
     }
+    void **cmd_data = parse_msg(msg);
+    free(msg->ptr);
+    free(msg);
+
+    if (!cmd_data)
+    {
+        node_printf(host_id, "Invalid message received.\n");
+        sm_relase();
+        exit(EXIT_FAILURE);
+    }
+
+    char *cmd = (char *)cmd_data[0];
+    struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
+
+    if (is_confirm_cmd(cmd, CLIENT_CMD_BARRIER))
+    {
+    }
+    free(cmd);
+    free(data->ptr);
+    free(data);
+    free(cmd_data);
+    set_fd_async(client_socket_fd);
 }
 
 void sm_bcast(void **addr, int root_nid)
