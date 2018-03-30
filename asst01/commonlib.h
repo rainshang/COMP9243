@@ -18,7 +18,8 @@ typedef char bool;
 #define SERVER_CMD_EXIT_CLIENTS "SERVER_CMD_EXIT_CLIENTS"
 #define CLIENT_CMD_BARRIER "CLIENT_CMD_BARRIER"
 #define CLIENT_CMD_MALLOC "CLIENT_CMD_MALLOC"
-
+#define READ_FAULT "READ_FAULT"
+#define CMD_READ_FAULT "CMD_READ_FAULT"
 typedef struct sm_ptr
 {
     void *ptr; // usually, need to free() this pointer manually
@@ -51,12 +52,7 @@ void init_sockaddr_in(struct sockaddr_in *sockaddr, const char *ip, int port);
 int protocol_write(int fd, const struct sm_ptr *msg);
 /**
  * will check the O_NONBLOCK flag to read in an infinite loop until getting valid messages or error happening
-<<<<<<< HEAD
- *
- * return the message and the msg_size
-=======
  * thus, it finally return the data it reads or NULL (error occours)
->>>>>>> a6b21c0f53a2b28fb9efeb3a87568094337d2e67
  */
 struct sm_ptr *protocol_read(int fd);
 /**

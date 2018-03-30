@@ -220,18 +220,18 @@ int main(int argc, char *argv[])
                                     memcpy(&pagesize, data->ptr + sizeof(client_nids[ii]), sizeof(pagesize));
                                     void *sm_addr;
                                     memcpy(&sm_addr, data->ptr + sizeof(client_nids[ii]) + sizeof(pagesize), sizeof(sm_addr));
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("a native sm_address is %p\n", sm_addr);
-                                    }
+                                    // if (DEBUG)
+                                    // {
+                                    //     allocator_printf("a native sm_address is %p\n", sm_addr);
+                                    // }
                                     if (sm_addr < aligned_sm_start_addr)
                                     {
                                         aligned_sm_start_addr = sm_addr;
                                     }
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
-                                    }
+                                    // if (DEBUG)
+                                    // {
+                                    //     allocator_printf("current aligned sm_address is %p\n", aligned_sm_start_addr);
+                                    // }
                                     if (ii == parameters->host_num - 1) //all nodes have registered
                                     {
                                         free(data->ptr);
@@ -258,10 +258,10 @@ int main(int argc, char *argv[])
                                 {
                                     void *sm_addr;
                                     memcpy(&sm_addr, data->ptr, sizeof(sm_addr));
-                                    if (DEBUG)
-                                    {
-                                        allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
-                                    }
+                                    // if (DEBUG)
+                                    // {
+                                    //     allocator_printf("a aligned sm_address from node is %p\n", sm_addr);
+                                    // }
                                     if (ii == 0)
                                     {
                                         aligned_sm_start_addr = sm_addr;
@@ -363,37 +363,7 @@ int main(int argc, char *argv[])
                                   msg = generate_msg(confirm_cmd, data);
                                   protocol_write(client_socket_fds[ii], msg);
 
-                                    // current_request_read = client_socket_fds[ii];
-                                    // current_request_address_content = data;
-                                    // for node in write tag:
-                                    //     struct sm_ptr *cmd_msg = generate_msg(to releasing ownership, NULL);
-                                    // for data write tag:
-                                    //     struct sm_ptr *cmd_msg = generate_msg(give up write permission, NULL);
-                                    //     write tag clean up;
                                 }
-                                // else if (!strcmp(releasing ownership, cmd))
-                                // {
-                                //   protocol_write(giving you read permission, current_request_read, current_request_address_content);
-                                //
-                                // }
-                                // else if (!strcmp(releasing ownership to, cmd){
-                                //     invalidated_count++;
-                                // }
-                                // else if (!strcmp(receiving read permission, cmd){
-                                //     read list[].append;
-                                // }
-                                // else if (!strcmp(WRITE_FAULT, cmd){
-                                //   for data all in read list[]:
-                                //       struct sm_ptr *cmd_msg = generate_msg(to invalidated, NULL);
-                                //
-                                //   write tag =  client_nids[ii];
-                                //   current_request_write = client_nids[ii];
-                                //
-                                // }
-                                // else if (!strcmp(react to invalidated, cmd){
-                                //   invalidated_count++;
-                                // }
-
                                 free(cmd);
                                 free(data->ptr);
                                 free(data);
@@ -454,13 +424,6 @@ int main(int argc, char *argv[])
                             free(msg->ptr);
                             free(msg);
                         }
-                        //
-                        // if (invalidated_count == len(read list[])){
-                        //   protocol_write(giving you write permission, current_request_read, current_request_address_content);
-                        //   write tag = ;
-                        //   invalidated_count = 0;
-                        // }
-
                     }
                 }
             }

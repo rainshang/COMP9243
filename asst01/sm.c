@@ -130,10 +130,10 @@ static int register_node(void **native_sm_addr, void **aligned_sm_addr)
     *native_sm_addr = mmap(NULL, sm_total_size,
                            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
                            -1, 0);
-    if (DEBUG)
-    {
-        node_printf(host_id, "available sm_address on this node is %p\n", *native_sm_addr);
-    }
+    // if (DEBUG)
+    // {
+    //     node_printf(host_id, "available sm_address on this node is %p\n", *native_sm_addr);
+    // }
     struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
     data->size = sizeof(host_id) + sizeof(pagesize) + sizeof(native_sm_addr);
     char *data_ptr = malloc(data->size);
@@ -185,10 +185,10 @@ static int register_node(void **native_sm_addr, void **aligned_sm_addr)
         sm_relase();
         return -1;
     }
-    if (DEBUG)
-    {
-        node_printf(host_id, "first aligned available sm_address is %p\n", *aligned_sm_addr);
-    }
+    // if (DEBUG)
+    // {
+    //     node_printf(host_id, "first aligned available sm_address is %p\n", *aligned_sm_addr);
+    // }
     return 0;
 }
 
@@ -388,43 +388,9 @@ void sm_node_exit(void)
     sm_relase();
 }
 
-// functuion receive_message(){
-//     struct sm_ptr *msg = protocol_read(client_socket_fd);
-//     if (msg){
-//       void **cmd_data = parse_msg(msg);
-//       char *cmd = (char *)cmd_data[0];
-//       struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
-//       if (!strcmp(to releasing ownership, cmd)){
-//         if (a has read permission ){
-//           mprotect(a, pagesize, PORT_READ);
-//         }else if (a has not read permission ){
-//           mprotect(a, pagesize, PORT_NONE);
-//         }
-//         struct sm_ptr *msg = generate_msg(releasing ownership, NULL);
-//         protocol_write(client_socket_fd, msg);
-//       }
-//       else if (!strcmp(giving you read permission, cmd)){
-//         mprotect(a, pagesize, PORT_READ);
-//         struct sm_ptr *msg = generate_msg(receiving read permission, NULL);
-//         protocol_write(client_socket_fd, msg);
-//       }
-//
-//
-//       else if (!strcmp(to invalidated, cmd)){
-//         mprotect(a, pagesize, PORT_NONE);
-//         struct sm_ptr *msg = generate_msg(react to invalidated, NULL);
-//         protocol_write(client_socket_fd, msg);
-//       }
-//       else if (!strcmp(giving you write permission, cmd)){
-//         mprotect(a, pagesize, PORT_WRITE);
-//         struct sm_ptr *msg = generate_msg(receiving ownership, NULL);
-//         protocol_write(client_socket_fd, msg);
-//       }
-//     }
-// }
-
 void *sm_malloc(size_t size)
 {
+
     set_fd_sync(client_socket_fd);
 
     struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
@@ -501,6 +467,7 @@ void *sm_malloc(size_t size)
         sm_relase();
         exit(EXIT_FAILURE);
     }
+
 }
 
 void sm_barrier(void)
