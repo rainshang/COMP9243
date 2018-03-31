@@ -269,7 +269,6 @@ static int align_smaddr(void *native_sm_addr, void **aligned_sm_addr)
     return 0;
 }
 
-
 void handler (int signum, siginfo_t *si, void *ctx)
 {
     set_fd_sync(client_socket_fd);
@@ -280,14 +279,33 @@ void handler (int signum, siginfo_t *si, void *ctx)
     }
 
       addr = si->si_addr;       /* here we get the fault address */
-      //node_printf(host_id, "%p\n", addr);
-      struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+
+      struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
       data->size = sizeof(addr);
+
       char *data_ptr = malloc(data->size);
       memcpy(data_ptr, &addr, sizeof(addr));
-      data->ptr = data_ptr;
+      //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
+      data->ptr = data_ptr; // data: {*addr}
 
-      struct sm_ptr *msg = generate_msg(READ_FAULT, data);
+      struct sm_ptr *msg = NULL;
+      struct sm_ptr *smptr = NULL;
+      int i;
+
+      for (i = 0 ; i<sm_addr_vector.length; ++i)
+      {
+          smptr = (struct sm_ptr *)sm_addr_vector.data[i];
+          if (smptr->ptr == addr)
+          {
+              if (!smptr->has_read_permission){
+                msg = generate_msg(READ_FAULT, data);
+              }
+              else{
+                msg = generate_msg(WRITE_FAULT, data);
+              }
+              break;
+          }
+      }
       free(data->ptr);
       free(data);
       protocol_write(client_socket_fd, msg);
@@ -307,12 +325,11 @@ void handler (int signum, siginfo_t *si, void *ctx)
               sm_relase();
               exit(EXIT_FAILURE);
           }
-
           char *cmd = (char *)cmd_data[0];
           data = (struct sm_ptr *)cmd_data[1];
           if (is_confirm_cmd(cmd, CMD_READ_FAULT))
           {
-            mprotect (addr, 4096, PROT_WRITE|PROT_READ);
+            mprotect (addr, 4096, PROT_READ);
           }
           free(cmd);
           free(data->ptr);
@@ -361,7 +378,6 @@ int sm_node_init(int *argc, char **argv[], int *nodes, int *nid)
     sigaction(SIGINT, &sa, NULL);
 
     set_fd_async(client_socket_fd);
-
 
     struct sigaction saa;
     saa.sa_sigaction = handler;
@@ -509,20 +525,6 @@ void sm_barrier(void)
 
 void sm_bcast(void **addr, int root_nid)
 {
-<<<<<<< HEAD
-  set_fd_sync(client_socket_fd);
-
-
-
-
-
-
-
-
-
-  set_fd_async(client_socket_fd);
-}
-=======
     set_fd_sync(client_socket_fd);
     struct sm_ptr *data = NULL;
     if (host_id == root_nid)
@@ -620,4 +622,3 @@ void sm_bcast(void **addr, int root_nid)
 
     set_fd_async(client_socket_fd);
 }
->>>>>>> d77a3b9cfad3886fe28522a73ec86afbf26324c0

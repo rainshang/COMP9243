@@ -391,22 +391,6 @@ int main(int argc, char *argv[])
                                             count_barriered = 0;
                                         }
                                     }
-<<<<<<< HEAD
-                                    else if (!strcmp(READ_FAULT, cmd)){
-                                      if (DEBUG) {
-                                        allocator_printf("receive read fault from : %d\n", client_nids[ii]);
-                                      }
-                                      char *confirm_cmd = generate_confirm_cmd(CMD_READ_FAULT);
-                                      msg = generate_msg(confirm_cmd, NULL);
-                                      free(confirm_cmd);
-                                      protocol_write(client_socket_fds[ii], msg);
-                                      free(msg->ptr);
-                                      free(msg);
-
-                                    }
-
-
-=======
                                     else if (!strcmp(CLIENT_CMD_BROADCAST, cmd))
                                     {
                                         ++count_bcasted;
@@ -463,7 +447,25 @@ int main(int argc, char *argv[])
                                             count_bcasted = 0;
                                         }
                                     }
->>>>>>> d77a3b9cfad3886fe28522a73ec86afbf26324c0
+                                    else if (!strcmp(READ_FAULT, cmd)){
+                                      if (DEBUG) {
+                                        allocator_printf("receive read fault from %d\n", client_nids[ii]);
+                                      }
+                                      int i;
+                                      struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                      for (i=0; i<sm_permission_vector.length; ++i){
+                                        smper = (struct sm_permission *)sm_permission_vector.data[i];
+                                        if (smper->ptr == data){
+                                          
+
+                                        }
+
+
+                                      }
+
+
+                                     }
+
                                     free(cmd);
                                     free(data->ptr);
                                     free(data);
