@@ -8,8 +8,8 @@
 typedef struct sm_permission
 {
     void *ptr; // address of each mempry sm_malloc()ed
-    bool has_write_permission_node;
-    bool *has_read_permission_nodes;
+    int has_write_permission_node;
+    int *has_read_permission_nodes;
 } sm_permission;
 
 int generate_client_nid(int seek)
@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
                                             struct sm_ptr *msg1 = generate_msg(confirm_cmd, data);
                                             free(confirm_cmd);
                                             unsigned iii;
-                                            bool tmp[parameters->host_num];
+                                            int tmp_write_nodes[parameters->host_num];
                                             for (iii = 0; iii < parameters->host_num; ++iii)
                                             {
                                                 if (iii == bcast_node_index)
@@ -428,13 +428,13 @@ int main(int argc, char *argv[])
                                                 {
                                                     protocol_write(client_socket_fds[iii], msg1);
                                                 }
-                                                tmp[iii] = false;
+                                                tmp_write_nodes[iii] = -1;
                                             }
                                             struct sm_permission *smper = malloc(sizeof(struct sm_permission));
                                             smper->ptr = bcast_addr;
                                             smper->has_write_permission_node = client_nids[bcast_node_index];
-                                            tmp[0] = true;
-                                            smper->has_read_permission_nodes = tmp;
+                                            tmp_write_nodes[0] = client_nids[bcast_node_index];
+                                            smper->has_read_permission_nodes = tmp_write_nodes;
                                             vec_push(&sm_permission_vector, smper);
                                             if (DEBUG)
                                             {
