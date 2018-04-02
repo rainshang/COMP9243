@@ -425,7 +425,7 @@ int main(int argc, char *argv[])
                                             struct sm_ptr *msg1 = generate_msg(confirm_cmd, data);
                                             free(confirm_cmd);
                                             unsigned iii;
-                                            int tmp_write_nodes[parameters->host_num];
+                                            int tmp_read_nodes[parameters->host_num];
                                             for (iii = 0; iii < parameters->host_num; ++iii)
                                             {
                                                 if (iii == bcast_node_index)
@@ -436,11 +436,12 @@ int main(int argc, char *argv[])
                                                 {
                                                     protocol_write(client_socket_fds[iii], msg1);
                                                 }
-                                                tmp_write_nodes[iii] = -1;
+                                                tmp_read_nodes[iii] = -1;
                                             }
                                             struct sm_permission *smper = malloc(sizeof(struct sm_permission));
                                             smper->ptr = bcast_addr;
                                             smper->has_write_permission_node = client_nids[bcast_node_index];
+<<<<<<< HEAD
                                             //tmp_write_nodes[0] = client_nids[bcast_node_index];
                                             smper->has_read_permission_nodes[0] = client_nids[bcast_node_index];
                                             int k;
@@ -449,6 +450,10 @@ int main(int argc, char *argv[])
                                             }
                                             // allocator_printf("=======%d\n", smper->has_read_permission_nodes[1]);
                                             // exit(EXIT_FAILURE);
+=======
+                                            tmp_read_nodes[0] = client_nids[bcast_node_index];
+                                            smper->has_read_permission_nodes = tmp_read_nodes;
+>>>>>>> 1655d95aa381f16b4695f328b1cf01ee9c536c3a
                                             vec_push(&sm_permission_vector, smper);
                                             if (DEBUG)
                                             {

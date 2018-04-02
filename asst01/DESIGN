@@ -19,9 +19,105 @@ Milestone 2
 
 #import a third party verctor lib, https://github.com/rxi/vec
 
+<<<<<<< HEAD
 --when 'sm_node_init', each node calls 'mmap' to get available shared memory address(sm_addr), then send it the allocator. Allocator selects the MINIMUM one as the global shared memory start address, then returns it to nodes. Every node re-mmap by it and should get a new smaller address (aligned by page_size), which should be same. Then send to allocator again to double check
 --when 'sm_malloc', node sends the size to malloc to allocator, allocator will count how many pages this malloc needs, turns the 'unmalloc_sm_addr' to each node one by one and then move cursor by pages. Thus, every 'sm_malloc' memory will never overlap. 
 --then each node calls 'sm_bcast' to broadcast its new memory, including the address, size and data. When other nodes receives it, they 'mmap' with the given address and size, then fulfill the data, like a copy. What should be noticed is that this memory should be 'mprotect(PORT_NONE)' because it is 'on other node'
 --allocator should save read permission lists(r_list) of N node ids and write permiss node id for each address
 --when read fault sigal of one address generated, get latest node id in 'r_list', release its owner ship and read permission. Old updates the data to new, then the new node gets the read permission.
 --similar operation for writting fault
+=======
+--when 'sm_node_init',
+    each node calls 'mmap' to get available shared memory address(sm_addr), then sends it the allocator. 
+    allocator selects the MINIMUM one as the global shared memory start address, then returns it to nodes.
+    every node re-mmap by the MINIMUM address returned by allocator and maybe get a new smaller address (aligned by page_size), which should be same in every nodes.
+    then each node sends the re-mmap address to allocator to double check
+    allocator checks all the re-mmap addresses, if same, we got the global aligned shared memoery!
+
+--when 'sm_malloc',
+    node sends the size to malloc to allocator,
+    allocator will count how many pages this malloc needs, using formula '(size - size % pagesize) / pagesize + 1'. This means the unit of sm_malloc() is page, because the mprotect() can only affect on page scale.
+    if the size not over bounds, allocator turns the 'unmalloc_sm_addr' to each node one by one and then move cursor(unmalloc_sm_addr) by pages.
+    when node receives the address allocator allocates, it save the address information(addr, size etc.) in a list. Of course, the node has the full write and read permission of this address.
+
+--when 'sm_bcast'
+    owner node calls 'sm_bcast' and sends its new memory, including the address, size.
+    meanwhile, the other nodes call 'sm_bcast', but send nothing.
+    when allocator receives all the 'sm_bcast' commands, it recognises the original owner and sends its address and size to other 'sm_bcast' nodes.
+    also, the allocator saves the sm_bcast address, the nodes who can read the address and the node who can write it. Currently, only the owner can.
+    the other nodes save the valid address and size in the list metioned in 'sm_malloc'. The 'other' nodes should set the address NO_ACCESS. 
+
+--when fault sigal of one address generated
+    node check the read and write permission
+    if !read
+        node send read request of this address to allocator.
+        allocator checks the address permission struct.
+        if one_node_has_write_permission
+            allocator ask this node to release the ownership and write permission.
+            and this node return the binary in this address.
+        else search the read permission list and find the latest read owner
+            allocator ask this node to release the ownership and write permission.
+            and this node return the binary in this address.
+        endif
+        allocator return the request node with the binary in this address.
+        allocator adds the request node into the address's read permission list
+    else if !write
+        node send write request of this address to allocator.
+        allocator checks the address permission struct.
+        if one_node_has_write_permission
+            allocator ask this node to release write permission.
+        endif
+        allocator tells all the node except the request node to release read permission.
+        allocator return the request node with the binary in this address.
+        allocator set the request node one_node_has_write_permission.
+    endif
+
+--struct sm_ptr
+    {
+        void *ptr;
+        size_t size;
+        bool has_write_permission;
+        bool has_read_permission;
+    }
+    a struct to save a point and the actual memeory size it represents
+
+--struct sm_permission
+    {
+        void *ptr;
+        int has_write_permission_node;
+        int *has_read_permission_nodes;
+    }
+    a struct to save 
+    which nodes have the read permission
+    and
+    which node has the write permission
+
+--'protocol_write' and 'protocol_read'
+    not changes much, still following {msg_len}{msg}. Based on socket, to rencognise one valid msg in the stream
+
+--'generate_msg' and 'parse_msg'
+    based on the msg protocol mentioned above, the format of msg following {cmd}{data}, in which, {data} is a sm_ptr*. Thus, the data and size will be clarified
+
+--we thought the given demos were just for mileston 2, so we didn't use sigal mechanism in milestion 1......(ノÒ益Ó)ノ
+    we refactor the client (sm.c) with sigaction.
+
+
+workload division:
+--Ethan(z5108944)
+    design and implement the protocol and msg, network connecting stuff
+    design and implement the data structures
+    design and implement 'sm_node_init', including aligning shared momery address
+    refactor client by using sigaction in Milestone2
+    co-desgin the logic of memory reading and writing lock
+    implement 'sm_malloc'
+    implement 'sm_bcast'
+    code review, refactoring, management and documentation
+--Lee(z5099143)
+    design and implement the parsing of dsm parameters
+    design and implement 'sm_barrier'
+    design and implement the guard process and pipe of client in Milestone1
+    co-desgin the logic of memory reading and writing lock
+    implement the monitoring the fault of accessing address and requesting the permission
+    
+
+>>>>>>> 1655d95aa381f16b4695f328b1cf01ee9c536c3a
