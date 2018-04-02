@@ -110,3 +110,8 @@ workload division:
     design and implement the guard process and pipe of client in Milestone1
     co-desgin the logic of memory reading and writing lock
     implement the monitoring the fault of accessing address and requesting the permission
+<<<<<<< HEAD
+=======
+    
+
+>>>>>>> c3835b8de04b6cdd70061164683a52236a3031c4
