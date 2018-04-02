@@ -9,7 +9,7 @@ typedef struct sm_permission
 {
     void *ptr; // address of each mempry sm_malloc()ed
     int has_write_permission_node;
-    int has_read_permission_nodes[100];
+    int *has_read_permission_nodes;
 } sm_permission;
 
 int generate_client_nid(int seek)
@@ -226,12 +226,14 @@ int main(int argc, char *argv[])
                             {
                                 int len;
                                 struct sm_ptr *msg;
-                                if (read_fault_queue.length>0 && lock != 0){
-                                  allocator_printf("come in queue....\n");
-                                  msg = (struct sm_ptr *)vec_pop(&read_fault_queue);
+                                if (read_fault_queue.length > 0 && lock != 0)
+                                {
+                                    allocator_printf("come in queue....\n");
+                                    msg = (struct sm_ptr *)vec_pop(&read_fault_queue);
                                 }
-                                else{
-                                  msg = protocol_read(client_socket_fds[ii], &len);
+                                else
+                                {
+                                    msg = protocol_read(client_socket_fds[ii], &len);
                                 }
 
                                 if (msg) // msg coming in
@@ -456,12 +458,8 @@ int main(int argc, char *argv[])
                                             struct sm_permission *smper = malloc(sizeof(struct sm_permission));
                                             smper->ptr = bcast_addr;
                                             smper->has_write_permission_node = client_nids[bcast_node_index];
-                                            //tmp_write_nodes[0] = client_nids[bcast_node_index];
+                                            smper->has_read_permission_nodes = tmp_read_nodes;
                                             smper->has_read_permission_nodes[0] = client_nids[bcast_node_index];
-                                            int k;
-                                            for (k=1; k<parameters->host_num;++k){
-                                              smper->has_read_permission_nodes[k] = -1;
-                                            }
                                             // allocator_printf("=======%d\n", smper->has_read_permission_nodes[1]);
                                             // exit(EXIT_FAILURE);
                                             vec_push(&sm_permission_vector, smper);
@@ -476,104 +474,232 @@ int main(int argc, char *argv[])
                                             count_bcasted = 0;
                                         }
                                     }
-                                    else if (!strcmp(READ_FAULT, cmd)){
-                                      // if (DEBUG) {
-                                      //   allocator_printf("receive read fault from %d\n", client_nids[ii]);
-                                      // }
-                                      allocator_printf("++++++%d\n", lock);
+                                    else if (!strcmp(READ_FAULT, cmd))
+                                    {
+                                        // if (DEBUG) {
+                                        //   allocator_printf("receive read fault from %d\n", client_nids[ii]);
+                                        // }
+                                        allocator_printf("++++++%d\n", lock);
 
-                                      if (lock == 1){
-                                        struct sm_ptr *msg = generate_msg(READ_FAULT, data);
-                                        vec_push(&read_fault_queue, msg);
-                                        allocator_printf("inser to queue");
-                                      }
-                                      else{
-
-                                      char flag;
-                                      memcpy(&flag, data->ptr, sizeof(char));
-
-                                      allocator_printf("=====%s\n", &flag);
-
-                                      if (flag == 'r'){
-                                        memcpy(&current_want_read_node, data->ptr+sizeof(char
-                                        ), sizeof(int));
-
-                                        if (DEBUG) {
-                                          allocator_printf("receive read fault from %d\n", current_want_read_node);
+                                        if (lock == 1)
+                                        {
+                                            struct sm_ptr *msg = generate_msg(READ_FAULT, data);
+                                            vec_push(&read_fault_queue, msg);
+                                            allocator_printf("inser to queue");
                                         }
-                                        int ii;
-                                        for (ii=0; ii<parameters->host_num; ++ii){
-                                          if (client_nids[ii] == current_want_read_node){
-                                            current_want_read_node_index = ii;
-                                          }
-                                        }
-                                        int i;
-                                        struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                        void *receive_data;
-                                        memcpy(&receive_data, data->ptr+sizeof(char)+sizeof(int), sizeof(void*));
-                                        //bool flag = false;
-                                        for (i=0; i<sm_permission_vector.length; ++i){
-                                          smper = (struct sm_permission *)sm_permission_vector.data[i];
-                                          if (smper->ptr == receive_data){
-                                            if (smper->has_write_permission_node >= 0) {
-                                                target_release_ownership = smper->has_write_permission_node;
-                                                smper->has_write_permission_node = -1;
-                                                int jj;
-                                                for (jj=0; jj<parameters->host_num; ++jj){
-                                                  allocator_printf("%p=======%d\n", receive_data, smper->has_read_permission_nodes[jj]);
-                                                  if (smper->has_read_permission_nodes[jj] == -1){
-                                                    smper->has_read_permission_nodes[jj] = current_want_read_node;
+                                        else
+                                        {
 
-                                                    break;
-                                                  }
+                                            char flag;
+                                            memcpy(&flag, data->ptr, sizeof(char));
+
+                                            allocator_printf("=====%s\n", &flag);
+
+                                            if (flag == 'r')
+                                            {
+                                                memcpy(&current_want_read_node, data->ptr + sizeof(char), sizeof(int));
+
+                                                if (DEBUG)
+                                                {
+                                                    allocator_printf("receive read fault from %d\n", current_want_read_node);
                                                 }
-                                                //flag = true;
-                                            }
-                                            else{
-                                              int jj;
-                                              for (jj=parameters->host_num-1; jj>=0; --jj){
-                                                if (smper->has_read_permission_nodes[jj] != -1){
-                                                  allocator_printf("%p*****%d\n", receive_data, smper->has_read_permission_nodes[jj]);
-                                                  target_release_ownership = smper->has_read_permission_nodes[jj];
-                                                  //allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
-                                                  int k;
-                                                  for (k=0; k<parameters->host_num; ++k){
-                                                    if (smper->has_read_permission_nodes[k] == -1){
-                                                      smper->has_read_permission_nodes[k] = current_want_read_node;
-                                                      break;
+                                                int ii;
+                                                for (ii = 0; ii < parameters->host_num; ++ii)
+                                                {
+                                                    if (client_nids[ii] == current_want_read_node)
+                                                    {
+                                                        current_want_read_node_index = ii;
                                                     }
-                                                  }
-                                                   break;
                                                 }
-                                              }
-                                            }
-                                          }
-                                        }
-                                        struct sm_ptr *msg = generate_msg(RELEASE_OENERSHIP, data);
-                                        int ij;
-                                        for (ij=0; ij<parameters->host_num; ++ij){
-                                          if (client_nids[ij] == target_release_ownership){
-                                            target_release_ownership_index = ij;
-                                            break;
-                                          }
-                                        }
-                                        protocol_write(client_socket_fds[target_release_ownership_index], msg);
-                                        // allocator_printf("node %d request to read ...\n", client_nids[current_want_read_node_index]);
-                                        allocator_printf("%d has send release ownership to  %d....\n", client_nids[current_want_read_node_index], client_nids[target_release_ownership_index]);
+                                                int i;
+                                                struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                                void *receive_data;
+                                                memcpy(&receive_data, data->ptr + sizeof(char) + sizeof(int), sizeof(void *));
+                                                //bool flag = false;
+                                                for (i = 0; i < sm_permission_vector.length; ++i)
+                                                {
+                                                    smper = (struct sm_permission *)sm_permission_vector.data[i];
+                                                    if (smper->ptr == receive_data)
+                                                    {
+                                                        if (smper->has_write_permission_node >= 0)
+                                                        {
+                                                            target_release_ownership = smper->has_write_permission_node;
+                                                            smper->has_write_permission_node = -1;
+                                                            int jj;
+                                                            for (jj = 0; jj < parameters->host_num; ++jj)
+                                                            {
+                                                                allocator_printf("%p=======%d\n", receive_data, smper->has_read_permission_nodes[jj]);
+                                                                if (smper->has_read_permission_nodes[jj] == -1)
+                                                                {
+                                                                    smper->has_read_permission_nodes[jj] = current_want_read_node;
 
-                                      }
-                                      else if (flag == 'c'){
-                                        lock = 1;
-                                        memcpy(&release_ownership_node, data->ptr+sizeof(char), sizeof(int));
-                                        if (DEBUG) {
-                                          allocator_printf("receive ownership from %d\n", release_ownership_node);
+                                                                    break;
+                                                                }
+                                                            }
+                                                            //flag = true;
+                                                        }
+                                                        else
+                                                        {
+                                                            int jj;
+                                                            for (jj = parameters->host_num - 1; jj >= 0; --jj)
+                                                            {
+                                                                if (smper->has_read_permission_nodes[jj] != -1)
+                                                                {
+                                                                    allocator_printf("%p*****%d\n", receive_data, smper->has_read_permission_nodes[jj]);
+                                                                    target_release_ownership = smper->has_read_permission_nodes[jj];
+                                                                    //allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
+                                                                    int k;
+                                                                    for (k = 0; k < parameters->host_num; ++k)
+                                                                    {
+                                                                        if (smper->has_read_permission_nodes[k] == -1)
+                                                                        {
+                                                                            smper->has_read_permission_nodes[k] = current_want_read_node;
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                struct sm_ptr *msg = generate_msg(RELEASE_OENERSHIP, data);
+                                                int ij;
+                                                for (ij = 0; ij < parameters->host_num; ++ij)
+                                                {
+                                                    if (client_nids[ij] == target_release_ownership)
+                                                    {
+                                                        target_release_ownership_index = ij;
+                                                        break;
+                                                    }
+                                                }
+                                                protocol_write(client_socket_fds[target_release_ownership_index], msg);
+                                                // allocator_printf("node %d request to read ...\n", client_nids[current_want_read_node_index]);
+                                                allocator_printf("%d has send release ownership to  %d....\n", client_nids[current_want_read_node_index], client_nids[target_release_ownership_index]);
+                                            }
+                                            else if (flag == 'c')
+                                            {
+                                                lock = 1;
+                                                memcpy(&release_ownership_node, data->ptr + sizeof(char), sizeof(int));
+                                                if (DEBUG)
+                                                {
+                                                    allocator_printf("receive ownership from %d\n", release_ownership_node);
+                                                }
+                                                void *receive_data_address;
+                                                memcpy(&receive_data_address, data->ptr + sizeof(char) + sizeof(int), sizeof(void *));
+                                                struct sm_ptr *receive_data_content = malloc(sizeof(struct sm_ptr));
+                                                receive_data_content->size = data->size - sizeof(void *) - sizeof(char) - sizeof(int);
+                                                receive_data_content->ptr = malloc(receive_data_content->size);
+                                                memcpy(receive_data_content->ptr, data->ptr + sizeof(void *) + sizeof(char) + sizeof(int), receive_data_content->size);
+
+                                                char *confirm_cmd = generate_confirm_cmd(GIVING_READ_PERMISSION);
+
+                                                data = malloc(sizeof(struct sm_ptr));
+                                                data->size = receive_data_content->size;
+                                                char *data_ptr = malloc(data->size);
+                                                memcpy(data_ptr, receive_data_content->ptr, receive_data_content->size);
+                                                data->ptr = data_ptr;
+                                                struct sm_ptr *msg = generate_msg(confirm_cmd, data);
+
+                                                protocol_write(client_socket_fds[current_want_read_node_index], msg);
+                                                allocator_printf("has send read permission to %d....\n", client_nids[current_want_read_node_index]);
+                                                lock = 0;
+                                            }
                                         }
+                                    }
+
+                                    // if (lock2 > 0){
+                                    //   struct sm_ptr *msg = generate_msg(READ_FAULT, data);
+                                    //   vec_push(&read_fault_queue, msg);
+                                    // }
+                                    // else{
+                                    // //lock1 = 1;
+                                    //
+                                    // current_want_read_node = client_nids[ii];
+                                    // int i;
+                                    // current_want_read_node_index = ii;
+                                    //
+                                    // struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                    // void *receive_data;
+                                    //
+                                    // memcpy(&receive_data, data->ptr, sizeof(void*));
+                                    // //bool flag = false;
+                                    // for (i=0; i<sm_permission_vector.length; ++i){
+                                    //   smper = (struct sm_permission *)sm_permission_vector.data[i];
+                                    //   if (smper->ptr == receive_data){
+                                    //     if (smper->has_write_permission_node >= 0) {
+                                    //         target_release_ownership = smper->has_write_permission_node;
+                                    //         smper->has_write_permission_node = -1;
+                                    //         int jj;
+                                    //         for (jj=0; jj<parameters->host_num; ++jj){
+                                    //           allocator_printf("%p=======%d\n", receive_data, smper->has_read_permission_nodes[jj]);
+                                    //           if (smper->has_read_permission_nodes[jj] == -1){
+                                    //             smper->has_read_permission_nodes[jj] = current_want_read_node;
+                                    //
+                                    //             break;
+                                    //           }
+                                    //         }
+                                    //         //flag = true;
+                                    //     }
+                                    //     else{
+                                    //       int ii;
+                                    //       for (ii=parameters->host_num-1; ii>=0; --ii){
+                                    //         if (smper->has_read_permission_nodes[ii] != -1){
+                                    //           allocator_printf("%p*****%d\n", receive_data, smper->has_read_permission_nodes[ii]);
+                                    //           target_release_ownership = smper->has_read_permission_nodes[ii];
+                                    //           //allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
+                                    //           int jj;
+                                    //           for (jj=0; jj<parameters->host_num; ++jj){
+                                    //             if (smper->has_read_permission_nodes[jj] == -1){
+                                    //               smper->has_read_permission_nodes[jj] = current_want_read_node;
+                                    //               break;
+                                    //             }
+                                    //           }
+                                    //            break;
+                                    //         }
+                                    //       }
+                                    //     }
+                                    //   }
+                                    // }
+                                    // struct sm_ptr *msg = generate_msg(RELEASE_OENERSHIP, data);
+                                    // int ij;
+                                    // for (ij=0; ij<parameters->host_num; ++ij){
+                                    //   if (client_nids[ij] == target_release_ownership){
+                                    //     target_release_ownership_index = ij;
+                                    //     break;
+                                    //   }
+                                    // }
+                                    // protocol_write(client_socket_fds[target_release_ownership_index], msg);
+                                    // allocator_printf("node %d request to read ...\n", client_nids[current_want_read_node_index]);
+                                    // allocator_printf("%d has send release ownership to  %d....\n", client_nids[ii], client_nids[target_release_ownership_index]);
+                                    // if (client_nids[current_want_read_node] == 0){
+                                    //   allocator_printf("==========%p\n", receive_data);
+                                    //   exit(EXIT_FAILURE);
+                                    // }
+                                    // free(msg->ptr);
+                                    // free(msg);
+                                    // free(receive_data);
+                                    // free(smper->ptr);
+                                    // free(smper);
+                                    // free(data->ptr);
+                                    // free(data);
+                                    //}
+                                    //   lock1 = 0;
+                                    // }
+                                    // }
+                                    else if (!strcmp(HAVE_RELEASED_OWNERSHIP, cmd))
+                                    {
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("receive ownership from %d\n", client_nids[ii]);
+                                        }
+
                                         void *receive_data_address;
-                                        memcpy(&receive_data_address, data->ptr + sizeof(char) + sizeof(int), sizeof(void*));
-                                        struct sm_ptr *receive_data_content=malloc(sizeof(struct sm_ptr));
-                                        receive_data_content->size = data->size - sizeof(void*)-sizeof(char)-sizeof(int);
+                                        memcpy(&receive_data_address, data->ptr, sizeof(void *));
+                                        struct sm_ptr *receive_data_content = malloc(sizeof(struct sm_ptr));
+                                        receive_data_content->size = data->size - sizeof(void *);
                                         receive_data_content->ptr = malloc(receive_data_content->size);
-                                        memcpy(receive_data_content->ptr, data->ptr + sizeof(void*)+sizeof(char)+sizeof(int), receive_data_content->size);
+                                        memcpy(receive_data_content->ptr, data->ptr + sizeof(void *), receive_data_content->size);
 
                                         char *confirm_cmd = generate_confirm_cmd(GIVING_READ_PERMISSION);
 
@@ -584,207 +710,112 @@ int main(int argc, char *argv[])
                                         data->ptr = data_ptr;
                                         struct sm_ptr *msg = generate_msg(confirm_cmd, data);
 
+                                        // int k;
+                                        // struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                        // for (k=0; k<sm_permission_vector.length; ++k) {
+                                        //    smper = (struct sm_permission *)sm_permission_vector.data[k];
+                                        //    if (smper->ptr == receive_data_address){
+                                        //      //smper->has_write_permission_node = -1;
+                                        //      int jj;
+                                        //      for (jj=0; jj<parameters->host_num; ++jj){
+                                        //        if (smper->has_read_permission_nodes[jj] == -1){
+                                        //          smper->has_read_permission_nodes[jj] = current_want_read_node;
+                                        //          break;
+                                        //        }
+                                        //      }
+                                        //    }
+                                        // }
                                         protocol_write(client_socket_fds[current_want_read_node_index], msg);
-                                        allocator_printf("has send read permission to %d....\n", client_nids[current_want_read_node_index]);
-                                        lock = 0;
-                                      }
-                                     }
-                                   }
+                                        allocator_printf("%d has send read permission to %d....\n", client_nids[ii], client_nids[current_want_read_node_index]);
 
-                                      // if (lock2 > 0){
-                                      //   struct sm_ptr *msg = generate_msg(READ_FAULT, data);
-                                      //   vec_push(&read_fault_queue, msg);
-                                      // }
-                                      // else{
-                                      // //lock1 = 1;
-                                      //
-                                      // current_want_read_node = client_nids[ii];
-                                      // int i;
-                                      // current_want_read_node_index = ii;
-                                      //
-                                      // struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                      // void *receive_data;
-                                      //
-                                      // memcpy(&receive_data, data->ptr, sizeof(void*));
-                                      // //bool flag = false;
-                                      // for (i=0; i<sm_permission_vector.length; ++i){
-                                      //   smper = (struct sm_permission *)sm_permission_vector.data[i];
-                                      //   if (smper->ptr == receive_data){
-                                      //     if (smper->has_write_permission_node >= 0) {
-                                      //         target_release_ownership = smper->has_write_permission_node;
-                                      //         smper->has_write_permission_node = -1;
-                                      //         int jj;
-                                      //         for (jj=0; jj<parameters->host_num; ++jj){
-                                      //           allocator_printf("%p=======%d\n", receive_data, smper->has_read_permission_nodes[jj]);
-                                      //           if (smper->has_read_permission_nodes[jj] == -1){
-                                      //             smper->has_read_permission_nodes[jj] = current_want_read_node;
-                                      //
-                                      //             break;
-                                      //           }
-                                      //         }
-                                      //         //flag = true;
-                                      //     }
-                                      //     else{
-                                      //       int ii;
-                                      //       for (ii=parameters->host_num-1; ii>=0; --ii){
-                                      //         if (smper->has_read_permission_nodes[ii] != -1){
-                                      //           allocator_printf("%p*****%d\n", receive_data, smper->has_read_permission_nodes[ii]);
-                                      //           target_release_ownership = smper->has_read_permission_nodes[ii];
-                                      //           //allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
-                                      //           int jj;
-                                      //           for (jj=0; jj<parameters->host_num; ++jj){
-                                      //             if (smper->has_read_permission_nodes[jj] == -1){
-                                      //               smper->has_read_permission_nodes[jj] = current_want_read_node;
-                                      //               break;
-                                      //             }
-                                      //           }
-                                      //            break;
-                                      //         }
-                                      //       }
-                                      //     }
-                                      //   }
-                                      // }
-                                      // struct sm_ptr *msg = generate_msg(RELEASE_OENERSHIP, data);
-                                      // int ij;
-                                      // for (ij=0; ij<parameters->host_num; ++ij){
-                                      //   if (client_nids[ij] == target_release_ownership){
-                                      //     target_release_ownership_index = ij;
-                                      //     break;
-                                      //   }
-                                      // }
-                                      // protocol_write(client_socket_fds[target_release_ownership_index], msg);
-                                      // allocator_printf("node %d request to read ...\n", client_nids[current_want_read_node_index]);
-                                      // allocator_printf("%d has send release ownership to  %d....\n", client_nids[ii], client_nids[target_release_ownership_index]);
-                                      // if (client_nids[current_want_read_node] == 0){
-                                      //   allocator_printf("==========%p\n", receive_data);
-                                      //   exit(EXIT_FAILURE);
-                                      // }
-                                       // free(msg->ptr);
-                                       // free(msg);
-                                      // free(receive_data);
-                                      // free(smper->ptr);
-                                      // free(smper);
-                                      // free(data->ptr);
-                                      // free(data);
-                                        //}
-                                    //   lock1 = 0;
-                                    // }
-                                    // }
-                                     else if (!strcmp(HAVE_RELEASED_OWNERSHIP, cmd)){
-                                       if (DEBUG) {
-                                         allocator_printf("receive ownership from %d\n", client_nids[ii]);
-                                       }
-
-
-                                       void *receive_data_address;
-                                       memcpy(&receive_data_address, data->ptr, sizeof(void*));
-                                       struct sm_ptr *receive_data_content=malloc(sizeof(struct sm_ptr));
-                                       receive_data_content->size = data->size - sizeof(void*);
-                                       receive_data_content->ptr = malloc(receive_data_content->size);
-                                       memcpy(receive_data_content->ptr, data->ptr + sizeof(void*), receive_data_content->size);
-
-                                       char *confirm_cmd = generate_confirm_cmd(GIVING_READ_PERMISSION);
-
-                                       data = malloc(sizeof(struct sm_ptr));
-                                       data->size = receive_data_content->size;
-                                       char *data_ptr = malloc(data->size);
-                                       memcpy(data_ptr, receive_data_content->ptr, receive_data_content->size);
-                                       data->ptr = data_ptr;
-                                       struct sm_ptr *msg = generate_msg(confirm_cmd, data);
-
-                                       // int k;
-                                       // struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                       // for (k=0; k<sm_permission_vector.length; ++k) {
-                                       //    smper = (struct sm_permission *)sm_permission_vector.data[k];
-                                       //    if (smper->ptr == receive_data_address){
-                                       //      //smper->has_write_permission_node = -1;
-                                       //      int jj;
-                                       //      for (jj=0; jj<parameters->host_num; ++jj){
-                                       //        if (smper->has_read_permission_nodes[jj] == -1){
-                                       //          smper->has_read_permission_nodes[jj] = current_want_read_node;
-                                       //          break;
-                                       //        }
-                                       //      }
-                                       //    }
-                                       // }
-                                       protocol_write(client_socket_fds[current_want_read_node_index], msg);
-                                       allocator_printf("%d has send read permission to %d....\n", client_nids[ii], client_nids[current_want_read_node_index]);
-
-                                       // allocator_printf("*****%d\n", current_want_read_node);
-                                       // exit(EXIT_FAILURE);
-                                       //
-                                       //  free(msg->ptr);
-                                       //  free(msg);
-                                       //  free(receive_data_address);
-                                       // free(receive_data_content->ptr);
-                                       //  free(receive_data_content);
+                                        // allocator_printf("*****%d\n", current_want_read_node);
+                                        // exit(EXIT_FAILURE);
+                                        //
+                                        //  free(msg->ptr);
+                                        //  free(msg);
+                                        //  free(receive_data_address);
+                                        // free(receive_data_content->ptr);
+                                        //  free(receive_data_content);
                                         // free(data->ptr);
                                         // free(data);
 
-                                       current_want_read_node = -1;
-                                       current_want_read_node_index = -1;
-                                       target_release_ownership = -1;
-                                       target_release_ownership_index = -1;
+                                        current_want_read_node = -1;
+                                        current_want_read_node_index = -1;
+                                        target_release_ownership = -1;
+                                        target_release_ownership_index = -1;
+                                    }
+                                    else if (!strcmp(WRITE_FAULT, cmd))
+                                    {
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("receive write fault from %d\n", client_nids[ii]);
+                                        }
+                                        current_want_write_node = client_nids[ii];
+                                        current_want_write_node_index = ii;
 
-                                     }
-                                     else if (!strcmp(WRITE_FAULT, cmd)){
-                                       if (DEBUG) {
-                                         allocator_printf("receive write fault from %d\n", client_nids[ii]);
-                                       }
-                                       current_want_write_node = client_nids[ii];
-                                       current_want_write_node_index = ii;
+                                        struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                        void *receive_data;
+                                        memcpy(&receive_data, data->ptr, sizeof(void *));
+                                        int i;
+                                        for (i = 0; i < sm_permission_vector.length; ++i)
+                                        {
+                                            smper = (struct sm_permission *)sm_permission_vector.data[i];
+                                            if (smper->ptr == receive_data)
+                                            {
+                                                int jj;
+                                                struct sm_ptr *msg = generate_msg(GIVE_UP_READ_PERMISSION, data);
+                                                for (jj = 0; jj < parameters->host_num; ++jj)
+                                                {
+                                                    if (smper->has_read_permission_nodes[jj] != -1 && smper->has_read_permission_nodes[jj] != current_want_write_node)
+                                                    {
+                                                        ++read_list_len;
+                                                        int target_node_id = smper->has_read_permission_nodes[jj];
+                                                        int jjj;
+                                                        for (jjj = 0; jjj < parameters->host_num; ++jjj)
+                                                        {
+                                                            if (client_nids[jjj] == target_node_id)
+                                                            {
+                                                                protocol_write(client_socket_fds[jjj], msg);
+                                                            }
+                                                        }
+                                                    }
+                                                    else if (smper->has_read_permission_nodes[jj] != -1)
+                                                    {
+                                                        smper->has_read_permission_nodes[jj] = -1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (!strcmp(INVALIDATED, cmd))
+                                    {
+                                        if (DEBUG)
+                                        {
+                                            allocator_printf("receive invalited from %d\n", client_nids[ii]);
+                                        }
+                                        ++invalidated_count;
+                                        //allocator_printf("read_list_len = %d, invalidated_count = %d\n", read_list_len, invalidated_count);
 
-                                       struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                       void *receive_data;
-                                       memcpy(&receive_data, data->ptr, sizeof(void *));
-                                       int i;
-                                       for (i=0; i<sm_permission_vector.length; ++i){
-                                         smper = (struct sm_permission *)sm_permission_vector.data[i];
-                                         if (smper->ptr == receive_data){
-                                           int jj;
-                                           struct sm_ptr *msg = generate_msg(GIVE_UP_READ_PERMISSION, data);
-                                           for (jj=0;jj<parameters->host_num;++jj){
-                                             if (smper->has_read_permission_nodes[jj] != -1 && smper->has_read_permission_nodes[jj] != current_want_write_node){
-                                               ++read_list_len;
-                                               int target_node_id = smper->has_read_permission_nodes[jj];
-                                               int jjj;
-                                               for (jjj=0; jjj<parameters->host_num;++jjj){
-                                                 if (client_nids[jjj] == target_node_id){
-                                                   protocol_write(client_socket_fds[jjj], msg);
-                                                 }
-                                               }
-                                             }
-                                             else if (smper->has_read_permission_nodes[jj] != -1){
-                                               smper->has_read_permission_nodes[jj] = -1;
-                                             }
-                                           }
-                                         }
-                                       }
-                                     }
-                                     else if (!strcmp(INVALIDATED, cmd)){
-                                       if (DEBUG) {
-                                         allocator_printf("receive invalited from %d\n", client_nids[ii]);
-                                       }
-                                       ++invalidated_count;
-                                       //allocator_printf("read_list_len = %d, invalidated_count = %d\n", read_list_len, invalidated_count);
-
-                                       if (read_list_len == invalidated_count){
-                                         struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                         void *receive_data;
-                                         memcpy(&receive_data, data->ptr, sizeof(void *));
-                                         int i;
-                                         for (i=0; i<sm_permission_vector.length; ++i){
-                                           smper = (struct sm_permission *)sm_permission_vector.data[i];
-                                           if (smper->ptr == receive_data){
-                                             smper->has_write_permission_node = current_want_write_node;
-                                           }
-                                         }
-                                         struct sm_ptr *msg = generate_msg(GIVE_WRITE_PERMISSION, data);
-                                         protocol_write(client_socket_fds[current_want_write_node_index], msg);
-                                         read_list_len=0;
-                                         invalidated_count=0;
-                                       }
-                                     }
+                                        if (read_list_len == invalidated_count)
+                                        {
+                                            struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                            void *receive_data;
+                                            memcpy(&receive_data, data->ptr, sizeof(void *));
+                                            int i;
+                                            for (i = 0; i < sm_permission_vector.length; ++i)
+                                            {
+                                                smper = (struct sm_permission *)sm_permission_vector.data[i];
+                                                if (smper->ptr == receive_data)
+                                                {
+                                                    smper->has_write_permission_node = current_want_write_node;
+                                                }
+                                            }
+                                            struct sm_ptr *msg = generate_msg(GIVE_WRITE_PERMISSION, data);
+                                            protocol_write(client_socket_fds[current_want_write_node_index], msg);
+                                            read_list_len = 0;
+                                            invalidated_count = 0;
+                                        }
+                                    }
 
                                     free(cmd);
                                     free(data->ptr);
