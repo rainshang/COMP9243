@@ -56,19 +56,19 @@ int main (int argc, char *argv[])
   /* next, node #1 allocates a shared variable and uses it to allow node #0
    * to communicate the letter `B' to it
    */
-  if (1 == nid)
-    sharedChar2 = (char *) sm_malloc (sizeof (char));
-  sm_bcast ((void **) &sharedChar2, 1);
+  // if (1 == nid)
+  //   sharedChar2 = (char *) sm_malloc (sizeof (char));
+  // sm_bcast ((void **) &sharedChar2, 1);
   // /* Checkpoint C */
-  if (0 == nid)
-    *sharedChar2 = 'B';
-  /* Checkpoint D */
-  sm_barrier ();	/* make sure node #0 wrote the character */
-  if (0 != nid)
-    printf ("node %d: Value in 2nd shared variable is %d\n",
-	    nid, *sharedChar2);
-  /* Checkpoint E */
-  sm_barrier ();
+  // if (0 == nid)
+  //   *sharedChar2 = 'B';
+  // /* Checkpoint D */
+  // sm_barrier ();	/* make sure node #0 wrote the character */
+  // if (0 != nid)
+  //   printf ("node %d: Value in 2nd shared variable is %d\n",
+	//     nid, *sharedChar2);
+  // /* Checkpoint E */
+  // sm_barrier ();
 
   sm_node_exit ();
   return 0;

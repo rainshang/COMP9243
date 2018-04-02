@@ -282,11 +282,20 @@ void handler (int signum, siginfo_t *si, void *ctx)
       addr = si->si_addr;       /* here we get the fault address */
 
       struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-      data->size = sizeof(addr);
+      data->size = sizeof(addr) + sizeof(int) + sizeof(int);
       char *data_ptr = malloc(data->size);
-      memcpy(data_ptr, &addr, sizeof(addr));
+
+      char *flag = malloc(sizeof(char));
+      *flag = 'r';
+
+      // node_printf(host_id, "----%s\n", *flag);
+      // sm_relase();
+      // exit(EXIT_FAILURE);
+      memcpy(data_ptr, flag, sizeof(char));
+      memcpy(data_ptr+sizeof(char), &host_id, sizeof(host_id));
+      memcpy(data_ptr+sizeof(char)+sizeof(host_id), &addr, sizeof(addr));
       //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
-      data->ptr = data_ptr; // data: {*addr}
+      data->ptr = data_ptr; // data: {flag}{host_id}{*addr}
 
       struct sm_ptr *msg = NULL;
       struct sm_ptr *smptr = NULL;
@@ -581,19 +590,27 @@ void sm_barrier(void)
       int ii;
       void *receive_data;
 
-      memcpy(&receive_data, data->ptr, sizeof(void *));
+      memcpy(&receive_data, data->ptr + sizeof(int) + sizeof(int), sizeof(void *));
 
       for (ii=0; ii<sm_addr_vector.length; ++ii){
         smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
         if (smptr->ptr == receive_data){
           struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-          data->size = sizeof(void*) + smptr->size;
+          data->size = sizeof(int) + sizeof(void*) + smptr->size + sizeof(int);
           char *data_ptr = malloc(data->size);
-          memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
-          memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
+          int a = 1;
+          void *flag = &a;
 
-          data->ptr = data_ptr; // data: {*addr}{content}
-          msg = generate_msg(HAVE_RELEASED_OWNERSHIP,data);
+
+
+          void *nid = &host_id;
+          memcpy(data_ptr, &flag, sizeof(int));
+          memcpy(data_ptr+sizeof(void*), &nid, sizeof(int));
+          memcpy(data_ptr + sizeof(void *) + sizeof(void *), &(smptr->ptr), sizeof(void *));
+          memcpy(data_ptr + sizeof(void *) + sizeof(void *) + sizeof(void *), smptr->ptr, smptr->size);
+
+          data->ptr = data_ptr; // data: {flag}{host_id}{*addr}{content}
+          msg = generate_msg(READ_FAULT,data);
           mprotect(receive_data, smptr->size, PROT_READ);
           smptr->has_write_permission = false;
         }

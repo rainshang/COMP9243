@@ -9,7 +9,7 @@ typedef char bool;
 
 #define DEBUG true
 
-#define SOCKET_TIMEOUT 100
+#define SOCKET_TIMEOUT 10
 #define PAGE_NUM 0xFFFF
 
 #define CLIENT_CMD_REGISTER "CLIENT_CMD_REGISTER"
