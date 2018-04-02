@@ -441,7 +441,6 @@ int main(int argc, char *argv[])
                                             struct sm_permission *smper = malloc(sizeof(struct sm_permission));
                                             smper->ptr = bcast_addr;
                                             smper->has_write_permission_node = client_nids[bcast_node_index];
-<<<<<<< HEAD
                                             //tmp_write_nodes[0] = client_nids[bcast_node_index];
                                             smper->has_read_permission_nodes[0] = client_nids[bcast_node_index];
                                             int k;
@@ -450,10 +449,6 @@ int main(int argc, char *argv[])
                                             }
                                             // allocator_printf("=======%d\n", smper->has_read_permission_nodes[1]);
                                             // exit(EXIT_FAILURE);
-=======
-                                            tmp_read_nodes[0] = client_nids[bcast_node_index];
-                                            smper->has_read_permission_nodes = tmp_read_nodes;
->>>>>>> 1655d95aa381f16b4695f328b1cf01ee9c536c3a
                                             vec_push(&sm_permission_vector, smper);
                                             if (DEBUG)
                                             {
@@ -491,7 +486,7 @@ int main(int argc, char *argv[])
                                               for (jj=0; jj<parameters->host_num; ++jj){
                                                 if (smper->has_read_permission_nodes[jj] == -1){
                                                   smper->has_read_permission_nodes[jj] = current_want_read_node;
-                                                  allocator_printf("=======%d\n", smper->has_read_permission_nodes[jj]);
+                                                  //allocator_printf("=======%d\n", smper->has_read_permission_nodes[jj]);
                                                   break;
                                                 }
                                               }
@@ -502,7 +497,7 @@ int main(int argc, char *argv[])
                                             for (ii=parameters->host_num-1; ii>=0; --ii){
                                               if (smper->has_read_permission_nodes[ii] != -1){
                                                 target_release_ownership = smper->has_read_permission_nodes[ii];
-                                                allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
+                                                //allocator_printf("*******%d\n", smper->has_read_permission_nodes[ii]);
                                                 int jj;
                                                 for (jj=0; jj<parameters->host_num; ++jj){
                                                   if (smper->has_read_permission_nodes[jj] == -1){
@@ -638,7 +633,7 @@ int main(int argc, char *argv[])
                                          allocator_printf("receive invalited from %d\n", client_nids[ii]);
                                        }
                                        ++invalidated_count;
-                                       allocator_printf("read_list_len = %d, invalidated_count = %d\n", read_list_len, invalidated_count);
+                                       //allocator_printf("read_list_len = %d, invalidated_count = %d\n", read_list_len, invalidated_count);
 
                                        if (read_list_len == invalidated_count){
                                          struct sm_permission *smper = malloc(sizeof(struct sm_permission));
