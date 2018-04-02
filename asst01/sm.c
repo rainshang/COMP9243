@@ -12,6 +12,7 @@
 static int host_id;
 static int client_socket_fd;
 static int fault_time;
+static int flag = 0;
 
 static vec_void_t sm_addr_vector; // to store all the addresses in sm
 
@@ -34,6 +35,7 @@ static void sm_sigint_handler()
 
 static void sm_sigpoll_handler()
 {
+
     int len;
     struct sm_ptr *msg = protocol_read(client_socket_fd, &len);
 
@@ -65,7 +67,7 @@ static void sm_sigpoll_handler()
     }
     else
     {
-        node_printf(host_id, "Cannot read from allocator\n");
+        node_printf(host_id, "Cannot read from allocator====\n");
         sm_relase();
     }
 }
@@ -277,12 +279,10 @@ void handler (int signum, siginfo_t *si, void *ctx)
         printf ("Panic!");
         exit (1);
     }
-
       addr = si->si_addr;       /* here we get the fault address */
 
       struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
       data->size = sizeof(addr);
-
       char *data_ptr = malloc(data->size);
       memcpy(data_ptr, &addr, sizeof(addr));
       //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
@@ -303,7 +303,7 @@ void handler (int signum, siginfo_t *si, void *ctx)
               else{
                 msg = generate_msg(WRITE_FAULT, data);
               }
-              break;
+              // break;
           }
       }
       free(data->ptr);
@@ -327,9 +327,64 @@ void handler (int signum, siginfo_t *si, void *ctx)
           }
           char *cmd = (char *)cmd_data[0];
           data = (struct sm_ptr *)cmd_data[1];
-          if (is_confirm_cmd(cmd, CMD_READ_FAULT))
+
+          if (is_confirm_cmd(cmd, GIVING_READ_PERMISSION))
           {
-            mprotect (addr, 4096, PROT_READ);
+            if (DEBUG){
+              node_printf(host_id, "receive read permission......\n");
+            }
+
+            struct sm_ptr *received_data = malloc(sizeof(struct sm_ptr));;
+            received_data->size = data->size;
+            received_data->ptr = malloc(received_data->size);
+            memcpy(received_data->ptr, data->ptr, received_data->size);
+
+
+            struct sm_ptr *smptr = NULL;
+            int i;
+            for (i = 0; i<sm_addr_vector.length; ++i)
+            {
+                smptr = (struct sm_ptr *)sm_addr_vector.data[i];
+                if (smptr->ptr == addr)
+                {
+                  smptr->has_read_permission = true;
+                  mprotect (addr, smptr->size, PROT_READ|PROT_WRITE);
+                  memcpy(smptr->ptr, received_data->ptr, received_data->size);
+                  smptr->size = received_data->size;
+                  mprotect (addr, smptr->size, PROT_READ);
+                  node_printf(host_id, "can read ...\n");
+
+                }
+
+            }
+            // free(received_data->ptr);
+            // free(received_data);
+            // free(smptr->ptr);
+            // free(smptr);
+
+          }
+          else if (!strcmp(GIVE_WRITE_PERMISSION, cmd)){
+            if (DEBUG){
+              node_printf(host_id, "receive write permission......\n");
+            }
+            struct sm_ptr *received_data = malloc(sizeof(struct sm_ptr));;
+            received_data->size = data->size;
+            received_data->ptr = malloc(received_data->size);
+            memcpy(received_data->ptr, data->ptr, received_data->size);
+
+            struct sm_ptr *smptr = NULL;
+            int i;
+            for (i = 0; i<sm_addr_vector.length; ++i)
+            {
+                smptr = (struct sm_ptr *)sm_addr_vector.data[i];
+                if (smptr->ptr == addr)
+                {
+                  smptr->has_write_permission = true;
+                  mprotect (addr, smptr->size, PROT_WRITE);
+                  node_printf(host_id, "can write ...\n");
+                }
+            }
+
           }
           free(cmd);
           free(data->ptr);
@@ -486,42 +541,125 @@ void sm_barrier(void)
     free(msg->ptr);
     free(msg);
 
+ while (1) {
+  /* code */
     int len;
     msg = protocol_read(client_socket_fd, &len);
     if (!msg)
     {
-        node_printf(host_id, "Cannot read from allocator\n");
+        node_printf(host_id, "Cannot read from allocator+++++\n");
         sm_relase();
         exit(EXIT_FAILURE);
+        //continue;
     }
     void **cmd_data = parse_msg(msg);
     free(msg->ptr);
     free(msg);
-
     if (!cmd_data)
     {
         node_printf(host_id, "Invalid message received.\n");
         sm_relase();
         exit(EXIT_FAILURE);
     }
-
     char *cmd = (char *)cmd_data[0];
     struct sm_ptr *data = (struct sm_ptr *)cmd_data[1];
 
-    bool is_ccmd = is_confirm_cmd(cmd, CLIENT_CMD_BARRIER);
-    free(cmd);
-    free(data->ptr);
-    free(data);
-    free(cmd_data);
 
-    if (!is_ccmd)
-    {
-        node_printf(host_id, "Unexpected command received.\n");
-        sm_relase();
-        exit(EXIT_FAILURE);
+
+    if (is_confirm_cmd(cmd, CLIENT_CMD_BARRIER)){
+      break;
     }
+
+    else if (!strcmp(RELEASE_OENERSHIP, cmd)){
+      if (DEBUG){
+        node_printf(host_id, "receiving .......\n");
+      }
+      flag = 1;
+
+      struct sm_ptr *msg = NULL;
+      struct sm_ptr *smptr = NULL;
+      int ii;
+      void *receive_data;
+
+      memcpy(&receive_data, data->ptr, sizeof(void *));
+
+      for (ii=0; ii<sm_addr_vector.length; ++ii){
+        smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
+        if (smptr->ptr == receive_data){
+          struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
+          data->size = sizeof(void*) + smptr->size;
+          char *data_ptr = malloc(data->size);
+          memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
+          memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
+
+          data->ptr = data_ptr; // data: {*addr}{content}
+          msg = generate_msg(HAVE_RELEASED_OWNERSHIP,data);
+          mprotect(receive_data, smptr->size, PROT_READ);
+          smptr->has_write_permission = false;
+        }
+      }
+      // if (host_id == 1 && flag ==1){
+      //   node_printf(host_id, "========.....%p\n", data->ptr);
+      //   sm_relase();
+      //   exit(EXIT_FAILURE);
+      // }
+      protocol_write(client_socket_fd, msg);
+      node_printf(host_id, "releasing ownership....\n");
+      // free(cmd);
+      // free(data->ptr);
+      //  free(data);
+      //  free(cmd_data);
+      //  free(receive_data);
+      //free(smptr->ptr);
+      //free(smptr);
+      // free(msg->ptr);
+      // free(msg);
+
+    }
+    else if (!strcmp(GIVE_UP_READ_PERMISSION, cmd)){
+      if (DEBUG){
+        node_printf(host_id, "receiving give up read permission.......\n");
+      }
+      struct sm_ptr *msg = NULL;
+      struct sm_ptr *smptr = NULL;
+      int ii;
+      void *receive_data;
+
+      memcpy(&receive_data, data->ptr, sizeof(void *));
+
+      for (ii=0; ii<sm_addr_vector.length; ++ii){
+        smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
+        if (smptr->ptr == receive_data){
+          // struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
+          // data->size = sizeof(void*) + smptr->size;
+          // char *data_ptr = malloc(data->size);
+          // memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
+          // memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
+          //
+          // data->ptr = data_ptr; // data: {*addr}{content}
+          msg = generate_msg(INVALIDATED, data);
+          mprotect(receive_data, smptr->size, PROT_NONE);
+          smptr->has_read_permission = false;
+        }
+      }
+      protocol_write(client_socket_fd, msg);
+      node_printf(host_id, "invalidated....\n");
+    }
+
+ }
     set_fd_async(client_socket_fd);
-}
+    node_printf(host_id, "leave barrier........\n");
+
+  }
+
+
+    // if (!is_ccmd)
+    // {
+    //     node_printf(host_id, "Unexpected command received======.\n");
+    //     sm_relase();
+    //     exit(EXIT_FAILURE);
+    // }
+
 
 void sm_bcast(void **addr, int root_nid)
 {

@@ -9,7 +9,7 @@ typedef char bool;
 
 #define DEBUG true
 
-#define SOCKET_TIMEOUT 10
+#define SOCKET_TIMEOUT 100
 #define PAGE_NUM 0xFFFF
 
 #define CLIENT_CMD_REGISTER "CLIENT_CMD_REGISTER"
@@ -22,7 +22,13 @@ typedef char bool;
 #define READ_FAULT "READ_FAULT"
 #define WRITE_FAULT "WRITE_FAULT"
 #define CMD_READ_FAULT "CMD_READ_FAULT"
-
+#define RELEASE_OENERSHIP "RELEASE_OENERSHIP"
+#define HAVE_RELEASED_OWNERSHIP "HAVE_RELEASED_OWNERSHIP"
+#define GIVING_READ_PERMISSION "GIVING_READ_PERMISSION"
+#define WRITE_FAULT "WRITE_FAULT"
+#define GIVE_UP_READ_PERMISSION "GIVE_UP_READ_PERMISSION"
+#define INVALIDATED "INVALIDATED"
+#define GIVE_WRITE_PERMISSION "GIVE_WRITE_PERMISSION"
 typedef struct sm_ptr
 {
     void *ptr; // usually, need to free() this pointer manually
