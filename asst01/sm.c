@@ -275,7 +275,6 @@ void handler(int signum, siginfo_t *si, void *ctx)
 {
     set_fd_sync(client_socket_fd);
     void *addr;
-<<<<<<< HEAD
     if (SIGSEGV != signum) {
         printf ("Panic!");
         exit (1);
@@ -283,16 +282,11 @@ void handler(int signum, siginfo_t *si, void *ctx)
       addr = si->si_addr;       /* here we get the fault address */
 
       struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-      data->size = sizeof(addr) + sizeof(int) + sizeof(int);
+      data->size = sizeof(addr) + sizeof(char) + sizeof(host_id);
       char *data_ptr = malloc(data->size);
 
-      char *flag = malloc(sizeof(char));
-      *flag = 'r';
-
-      // node_printf(host_id, "----%s\n", *flag);
-      // sm_relase();
-      // exit(EXIT_FAILURE);
-      memcpy(data_ptr, flag, sizeof(char));
+      char flag = 'r';
+      memcpy(data_ptr, &flag, sizeof(char));
       memcpy(data_ptr+sizeof(char), &host_id, sizeof(host_id));
       memcpy(data_ptr+sizeof(char)+sizeof(host_id), &addr, sizeof(addr));
       //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
@@ -308,34 +302,6 @@ void handler(int signum, siginfo_t *si, void *ctx)
           if (smptr->ptr == addr)
           {
               if (!smptr->has_read_permission){
-=======
-    if (SIGSEGV != signum)
-    {
-        printf("Panic!");
-        exit(1);
-    }
-    addr = si->si_addr; /* here we get the fault address */
-
-    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
-    ;
-    data->size = sizeof(addr);
-    char *data_ptr = malloc(data->size);
-    memcpy(data_ptr, &addr, sizeof(addr));
-    //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
-    data->ptr = data_ptr; // data: {*addr}
-
-    struct sm_ptr *msg = NULL;
-    struct sm_ptr *smptr = NULL;
-    int i;
-
-    for (i = 0; i < sm_addr_vector.length; ++i)
-    {
-        smptr = (struct sm_ptr *)sm_addr_vector.data[i];
-        if (smptr->ptr == addr)
-        {
-            if (!smptr->has_read_permission)
-            {
->>>>>>> c3835b8de04b6cdd70061164683a52236a3031c4
                 msg = generate_msg(READ_FAULT, data);
             }
             else
@@ -607,41 +573,33 @@ void sm_barrier(void)
         {
             break;
         }
-
         else if (!strcmp(RELEASE_OENERSHIP, cmd))
         {
             if (DEBUG)
             {
                 node_printf(host_id, "receiving .......\n");
             }
-            flag = 1;
 
             struct sm_ptr *msg = NULL;
             struct sm_ptr *smptr = NULL;
             int ii;
             void *receive_data;
 
-            memcpy(&receive_data, data->ptr, sizeof(void *));
-
-<<<<<<< HEAD
-      memcpy(&receive_data, data->ptr + sizeof(int) + sizeof(int), sizeof(void *));
+            //memcpy(&receive_data, data->ptr, sizeof(void *));
+            memcpy(&receive_data, data->ptr + sizeof(char) + sizeof(int), sizeof(void *));
+            
 
       for (ii=0; ii<sm_addr_vector.length; ++ii){
         smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
         if (smptr->ptr == receive_data){
           struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-          data->size = sizeof(int) + sizeof(void*) + smptr->size + sizeof(int);
+          data->size = sizeof(char) + sizeof(host_id) + smptr->size + sizeof(void *);
           char *data_ptr = malloc(data->size);
-          int a = 1;
-          void *flag = &a;
-
-
-
-          void *nid = &host_id;
-          memcpy(data_ptr, &flag, sizeof(int));
-          memcpy(data_ptr+sizeof(void*), &nid, sizeof(int));
-          memcpy(data_ptr + sizeof(void *) + sizeof(void *), &(smptr->ptr), sizeof(void *));
-          memcpy(data_ptr + sizeof(void *) + sizeof(void *) + sizeof(void *), smptr->ptr, smptr->size);
+          char flag = 'c';
+          memcpy(data_ptr, &flag, sizeof(char));
+          memcpy(data_ptr+sizeof(char), &host_id, sizeof(host_id));
+          memcpy(data_ptr + sizeof(char) + sizeof(host_id), &(smptr->ptr), sizeof(void *));
+          memcpy(data_ptr + sizeof(char) + sizeof(host_id) + sizeof(void *), smptr->ptr, smptr->size);
 
           data->ptr = data_ptr; // data: {flag}{host_id}{*addr}{content}
           msg = generate_msg(READ_FAULT,data);
@@ -649,22 +607,8 @@ void sm_barrier(void)
           smptr->has_write_permission = false;
         }
       }
-      // if (host_id == 1 && flag ==1){
-      //   node_printf(host_id, "========.....%p\n", data->ptr);
-      //   sm_relase();
-      //   exit(EXIT_FAILURE);
-      // }
       protocol_write(client_socket_fd, msg);
       node_printf(host_id, "releasing ownership....\n");
-      // free(cmd);
-      // free(data->ptr);
-      //  free(data);
-      //  free(cmd_data);
-      //  free(receive_data);
-      //free(smptr->ptr);
-      //free(smptr);
-      // free(msg->ptr);
-      // free(msg);
 
     }
     else if (!strcmp(GIVE_UP_READ_PERMISSION, cmd)){
@@ -691,81 +635,14 @@ void sm_barrier(void)
           msg = generate_msg(INVALIDATED, data);
           mprotect(receive_data, smptr->size, PROT_NONE);
           smptr->has_read_permission = false;
-=======
-            for (ii = 0; ii < sm_addr_vector.length; ++ii)
-            {
-                smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
-                if (smptr->ptr == receive_data)
-                {
-                    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
-                    ;
-                    data->size = sizeof(void *) + smptr->size;
-                    char *data_ptr = malloc(data->size);
-                    memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
-                    memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
-
-                    data->ptr = data_ptr; // data: {*addr}{content}
-                    msg = generate_msg(HAVE_RELEASED_OWNERSHIP, data);
-                    mprotect(receive_data, smptr->size, PROT_READ);
-                    smptr->has_write_permission = false;
-                }
-            }
-            // if (host_id == 1 && flag ==1){
-            //   node_printf(host_id, "========.....%p\n", data->ptr);
-            //   sm_relase();
-            //   exit(EXIT_FAILURE);
-            // }
-            protocol_write(client_socket_fd, msg);
-            node_printf(host_id, "releasing ownership....\n");
-            // free(cmd);
-            // free(data->ptr);
-            //  free(data);
-            //  free(cmd_data);
-            //  free(receive_data);
-            //free(smptr->ptr);
-            //free(smptr);
-            // free(msg->ptr);
-            // free(msg);
-        }
-        else if (!strcmp(GIVE_UP_READ_PERMISSION, cmd))
-        {
-            if (DEBUG)
-            {
-                node_printf(host_id, "receiving give up read permission.......\n");
-            }
-            struct sm_ptr *msg = NULL;
-            struct sm_ptr *smptr = NULL;
-            int ii;
-            void *receive_data;
-
-            memcpy(&receive_data, data->ptr, sizeof(void *));
-
-            for (ii = 0; ii < sm_addr_vector.length; ++ii)
-            {
-                smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
-                if (smptr->ptr == receive_data)
-                {
-                    // struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-                    // data->size = sizeof(void*) + smptr->size;
-                    // char *data_ptr = malloc(data->size);
-                    // memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
-                    // memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
-                    //
-                    // data->ptr = data_ptr; // data: {*addr}{content}
-                    msg = generate_msg(INVALIDATED, data);
-                    mprotect(receive_data, smptr->size, PROT_NONE);
-                    smptr->has_read_permission = false;
-                }
-            }
-            protocol_write(client_socket_fd, msg);
-            node_printf(host_id, "invalidated....\n");
->>>>>>> c3835b8de04b6cdd70061164683a52236a3031c4
-        }
+      }
     }
+  }
+}
     set_fd_async(client_socket_fd);
     node_printf(host_id, "leave barrier........\n");
-}
 
+}
 // if (!is_ccmd)
 // {
 //     node_printf(host_id, "Unexpected command received======.\n");
