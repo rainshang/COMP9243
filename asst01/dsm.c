@@ -9,7 +9,7 @@ typedef struct sm_permission
 {
     void *ptr; // address of each mempry sm_malloc()ed
     int has_write_permission_node;
-    int has_read_permission_nodes[20];
+    int *has_read_permission_nodes;
 } sm_permission;
 
 int generate_client_nid(int seek)
@@ -442,8 +442,12 @@ int main(int argc, char *argv[])
                                             data->ptr = data_ptr; // data:{bcast_addr}{bcast_size}
                                             struct sm_ptr *msg1 = generate_msg(confirm_cmd, data);
                                             free(confirm_cmd);
+
+                                            struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                            smper->ptr = bcast_addr;
+                                            smper->has_write_permission_node = client_nids[bcast_node_index];
+                                            smper->has_read_permission_nodes = (int *)malloc(sizeof(int) * parameters->host_num);
                                             unsigned iii;
-                                            int tmp_read_nodes[parameters->host_num];
                                             for (iii = 0; iii < parameters->host_num; ++iii)
                                             {
                                                 if (iii == bcast_node_index)
@@ -454,19 +458,9 @@ int main(int argc, char *argv[])
                                                 {
                                                     protocol_write(client_socket_fds[iii], msg1);
                                                 }
-                                                tmp_read_nodes[iii] = -1;
+                                                smper->has_read_permission_nodes[iii] = -1;
                                             }
-                                            struct sm_permission *smper = malloc(sizeof(struct sm_permission));
-                                            smper->ptr = bcast_addr;
-                                            smper->has_write_permission_node = client_nids[bcast_node_index];
-                                            //tmp_read_nodes[0] = client_nids[bcast_node_index];
                                             smper->has_read_permission_nodes[0] = client_nids[bcast_node_index];
-                                            int k;
-                                            for (k = 1; k < parameters->host_num; ++k)
-                                            {
-                                                smper->has_read_permission_nodes[k] = -1;
-                                            }
-                                            //smper->has_read_permission_nodes = tmp_read_nodes;
                                             if (DEBUG)
                                             {
                                                 allocator_printf("node %d read list is\n", client_nids[bcast_node_index]);
@@ -512,7 +506,7 @@ int main(int argc, char *argv[])
                                                     }
                                                 }
                                                 int i;
-                                                struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                                struct sm_permission *smper = NULL;
                                                 void *receive_data;
                                                 memcpy(&receive_data, data->ptr + sizeof(char) + sizeof(int), sizeof(void *));
                                                 //bool flag = false;
@@ -574,7 +568,10 @@ int main(int argc, char *argv[])
                                                 }
                                                 protocol_write(client_socket_fds[target_release_ownership_index], msg);
                                                 // allocator_printf("node %d request to read ...\n", client_nids[current_want_read_node_index]);
-                                                allocator_printf("%d has send release ownership to  %d....\n", client_nids[current_want_read_node_index], client_nids[target_release_ownership_index]);
+                                                if (DEBUG)
+                                                {
+                                                    allocator_printf("%d has send release ownership to  %d....\n", client_nids[current_want_read_node_index], client_nids[target_release_ownership_index]);
+                                                }
                                                 lock = 1;
                                             }
                                             else if (flag == 'c')
@@ -602,7 +599,10 @@ int main(int argc, char *argv[])
                                                 struct sm_ptr *msg = generate_msg(confirm_cmd, data);
 
                                                 protocol_write(client_socket_fds[current_want_read_node_index], msg);
-                                                allocator_printf("has send read permission to %d....\n", client_nids[current_want_read_node_index]);
+                                                if (DEBUG)
+                                                {
+                                                    allocator_printf("has send read permission to %d....\n", client_nids[current_want_read_node_index]);
+                                                }
                                                 lock = 0;
                                                 current_want_read_node = -1;
                                                 current_want_read_node_index = -1;
@@ -627,7 +627,7 @@ int main(int argc, char *argv[])
                                         current_want_write_node = client_nids[ii];
                                         current_want_write_node_index = ii;
                                         bool tag = false;
-                                        struct sm_permission *smper = malloc(sizeof(struct sm_permission));
+                                        struct sm_permission *smper = NULL;
                                         void *receive_data;
                                         memcpy(&receive_data, data->ptr, sizeof(void *));
                                         int i;
