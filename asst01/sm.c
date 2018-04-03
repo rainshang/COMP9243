@@ -275,37 +275,44 @@ void handler(int signum, siginfo_t *si, void *ctx)
 {
     set_fd_sync(client_socket_fd);
     void *addr;
-    if (SIGSEGV != signum) {
-        printf ("Panic!");
-        exit (1);
+    if (SIGSEGV != signum)
+    {
+        printf("Panic!");
+        exit(1);
     }
-      addr = si->si_addr;       /* here we get the fault address */
+    addr = si->si_addr; /* here we get the fault address */
 
-      struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-      data->size = sizeof(addr) + sizeof(char) + sizeof(host_id);
-      char *data_ptr = malloc(data->size);
+    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+    ;
 
-      char flag = 'r';
-      memcpy(data_ptr, &flag, sizeof(char));
-      memcpy(data_ptr+sizeof(char), &host_id, sizeof(host_id));
-      memcpy(data_ptr+sizeof(char)+sizeof(host_id), &addr, sizeof(addr));
-      //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
-      data->ptr = data_ptr; // data: {flag}{host_id}{*addr}
+    struct sm_ptr *msg = NULL;
+    struct sm_ptr *smptr = NULL;
+    int i;
 
-      struct sm_ptr *msg = NULL;
-      struct sm_ptr *smptr = NULL;
-      int i;
-
-      for (i = 0 ; i<sm_addr_vector.length; ++i)
-      {
-          smptr = (struct sm_ptr *)sm_addr_vector.data[i];
-          if (smptr->ptr == addr)
-          {
-              if (!smptr->has_read_permission){
+    for (i = 0; i < sm_addr_vector.length; ++i)
+    {
+        smptr = (struct sm_ptr *)sm_addr_vector.data[i];
+        if (smptr->ptr == addr)
+        {
+            if (!smptr->has_read_permission)
+            {
+                data->size = sizeof(addr) + sizeof(char) + sizeof(host_id);
+                char *data_ptr = malloc(data->size);
+                char flag = 'r';
+                memcpy(data_ptr, &flag, sizeof(char));
+                memcpy(data_ptr + sizeof(char), &host_id, sizeof(host_id));
+                memcpy(data_ptr + sizeof(char) + sizeof(host_id), &addr, sizeof(addr));
+                //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
+                data->ptr = data_ptr; // data: {flag}{host_id}{*addr}
                 msg = generate_msg(READ_FAULT, data);
             }
             else
             {
+                data->size = sizeof(addr);
+                char *data_ptr = malloc(data->size);
+                memcpy(data_ptr, &addr, sizeof(addr));
+                //memcpy(data_ptr + sizeof(*addr), &(smptr->size), sizeof(size_t));
+                data->ptr = data_ptr; // data: {*addr}
                 msg = generate_msg(WRITE_FAULT, data);
             }
             // break;
@@ -587,61 +594,67 @@ void sm_barrier(void)
 
             //memcpy(&receive_data, data->ptr, sizeof(void *));
             memcpy(&receive_data, data->ptr + sizeof(char) + sizeof(int), sizeof(void *));
-            
 
-      for (ii=0; ii<sm_addr_vector.length; ++ii){
-        smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
-        if (smptr->ptr == receive_data){
-          struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-          data->size = sizeof(char) + sizeof(host_id) + smptr->size + sizeof(void *);
-          char *data_ptr = malloc(data->size);
-          char flag = 'c';
-          memcpy(data_ptr, &flag, sizeof(char));
-          memcpy(data_ptr+sizeof(char), &host_id, sizeof(host_id));
-          memcpy(data_ptr + sizeof(char) + sizeof(host_id), &(smptr->ptr), sizeof(void *));
-          memcpy(data_ptr + sizeof(char) + sizeof(host_id) + sizeof(void *), smptr->ptr, smptr->size);
+            for (ii = 0; ii < sm_addr_vector.length; ++ii)
+            {
+                smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
+                if (smptr->ptr == receive_data)
+                {
+                    struct sm_ptr *data = malloc(sizeof(struct sm_ptr));
+                    ;
+                    data->size = sizeof(char) + sizeof(host_id) + smptr->size + sizeof(void *);
+                    char *data_ptr = malloc(data->size);
+                    char flag = 'c';
+                    memcpy(data_ptr, &flag, sizeof(char));
+                    memcpy(data_ptr + sizeof(char), &host_id, sizeof(host_id));
+                    memcpy(data_ptr + sizeof(char) + sizeof(host_id), &(smptr->ptr), sizeof(void *));
+                    memcpy(data_ptr + sizeof(char) + sizeof(host_id) + sizeof(void *), smptr->ptr, smptr->size);
 
-          data->ptr = data_ptr; // data: {flag}{host_id}{*addr}{content}
-          msg = generate_msg(READ_FAULT,data);
-          mprotect(receive_data, smptr->size, PROT_READ);
-          smptr->has_write_permission = false;
+                    data->ptr = data_ptr; // data: {flag}{host_id}{*addr}{content}
+                    msg = generate_msg(READ_FAULT, data);
+                    mprotect(receive_data, smptr->size, PROT_READ);
+                    smptr->has_write_permission = false;
+                }
+            }
+            protocol_write(client_socket_fd, msg);
+            node_printf(host_id, "releasing ownership....\n");
         }
-      }
-      protocol_write(client_socket_fd, msg);
-      node_printf(host_id, "releasing ownership....\n");
+        else if (!strcmp(GIVE_UP_READ_PERMISSION, cmd))
+        {
+            if (DEBUG)
+            {
+                node_printf(host_id, "receiving give up read permission.......\n");
+            }
+            struct sm_ptr *msg = NULL;
+            struct sm_ptr *smptr = NULL;
+            int ii;
+            void *receive_data;
 
+            memcpy(&receive_data, data->ptr, sizeof(void *));
+
+            for (ii = 0; ii < sm_addr_vector.length; ++ii)
+            {
+                smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
+                if (smptr->ptr == receive_data)
+                {
+                    // struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
+                    // data->size = sizeof(void*) + smptr->size;
+                    // char *data_ptr = malloc(data->size);
+                    // memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
+                    // memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
+                    //
+                    // data->ptr = data_ptr; // data: {*addr}{content}
+                    msg = generate_msg(INVALIDATED, data);
+                    mprotect(receive_data, smptr->size, PROT_NONE);
+                    smptr->has_read_permission = false;
+                }
+            }
+            protocol_write(client_socket_fd, msg);
+            node_printf(host_id, "invalidated....\n");
+        }
     }
-    else if (!strcmp(GIVE_UP_READ_PERMISSION, cmd)){
-      if (DEBUG){
-        node_printf(host_id, "receiving give up read permission.......\n");
-      }
-      struct sm_ptr *msg = NULL;
-      struct sm_ptr *smptr = NULL;
-      int ii;
-      void *receive_data;
-
-      memcpy(&receive_data, data->ptr, sizeof(void *));
-
-      for (ii=0; ii<sm_addr_vector.length; ++ii){
-        smptr = (struct sm_ptr *)sm_addr_vector.data[ii];
-        if (smptr->ptr == receive_data){
-          // struct sm_ptr *data = malloc(sizeof(struct sm_ptr));;
-          // data->size = sizeof(void*) + smptr->size;
-          // char *data_ptr = malloc(data->size);
-          // memcpy(data_ptr, &(smptr->ptr), sizeof(void *));
-          // memcpy(data_ptr + sizeof(void *), smptr->ptr, smptr->size);
-          //
-          // data->ptr = data_ptr; // data: {*addr}{content}
-          msg = generate_msg(INVALIDATED, data);
-          mprotect(receive_data, smptr->size, PROT_NONE);
-          smptr->has_read_permission = false;
-      }
-    }
-  }
-}
     set_fd_async(client_socket_fd);
     node_printf(host_id, "leave barrier........\n");
-
 }
 // if (!is_ccmd)
 // {
