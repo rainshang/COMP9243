@@ -1,5 +1,5 @@
 #!/bin/bash
-PROCESSES="dsm share";
+PROCESSES="dsm share matmul";
 for i in $(seq -w 0 09);do
     echo "#### vina$i";
     ssh vina$i "ps aux | grep $USER;
