@@ -102,11 +102,8 @@ static int parse_param_and_connect(int *argc, char **argv[], int *nodes, int *ni
     host_id = *nid;
 
     //cut server info
-    if (*argc > 5)
-    {
-        *argc -= 5;
-        *argv += 5;
-    }
+    *argc -= 3;
+    *argv += 3;
 
     //connect socket
     if ((client_socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
