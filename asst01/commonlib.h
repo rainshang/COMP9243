@@ -7,7 +7,7 @@ typedef char bool;
 #define true 1
 #define false 0
 
-#define DEBUG true
+#define DEBUG false
 
 #define SOCKET_TIMEOUT 10
 #define PAGE_NUM 0xFFFF
