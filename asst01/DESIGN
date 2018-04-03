@@ -41,6 +41,10 @@ Milestone 2
 
 --when fault sigal of one address generated
     node check the read and write permission
+    dsm server will use a queue and lock to store the conflicted read or write requests from clients and ensure the concurrency.
+    If there are multiple read or write requests in the same one address(memory), server will response only one request and push
+    rest of requests to the queue, and lock the queue. After this request finished, the lock will be released and the queue will
+    pop another request to response.
     if !read
         node send read request of this address to allocator.
         allocator checks the address permission struct.
