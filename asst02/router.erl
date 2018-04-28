@@ -26,6 +26,21 @@ init(RouterName) ->
 listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable) ->
     receive
         {control, From, Pid, SeqNum, ControlFun} ->
+
+            % two 2PC must abort one
+            % not good implememt, need optimization
+            case ets:first(CtrlSeqReceivedTable) of
+                '$end_of_table' ->
+                    go_on;
+                _ ->
+                    case ets:member(CtrlSeqReceivedTable, SeqNum) of
+                        true ->
+                            go_on;
+                        false ->
+                            From ! {abort, self(), SeqNum}
+                    end
+            end,
+
             if
                 % initialisation, callback the func directly, without any 2PC
                 SeqNum == 0 ->
@@ -230,7 +245,7 @@ listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTab
                 _ ->
                     engaged2PC
             end
-    end. 
+    end.
 
 copyTable(Src, Dest) ->
     ets:delete_all_objects(Dest),

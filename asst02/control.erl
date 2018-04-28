@@ -32,8 +32,10 @@ graphToNetwork(Graph) ->
                     []
                 end},
             receive
-                {committed, Pid, SeqNum} ->
-                    ok
+                {committed, Pid, 0} ->
+                    ok;
+                {abort , Pid, 0} ->
+                    io:format ("*** ERROR: Configuration failed!~n")
             end
         end,
         Graph),
@@ -61,11 +63,54 @@ startNode(Name) ->
 getPidByName(Name, NamePidMap) ->
     ets:lookup_element(NamePidMap, Name, 2).
 
-% convert {Next, Dests} to {Pid, Dests}
-% edgesHelper(Edge) ->
-%     {Next, Dests} = Edge,
-%     {getPidByName(Next), Dests}.
-
 extendNetwork(RootPid, SeqNum, From, {NodeName, Edges}) ->
-    
-    1.
+    {_, NewPid} = startNode(NodeName),
+    % send init control sequence to new router directly
+    NewPid ! {control, self(), self(), 0,
+                fun(Name, Table) ->
+                    lists:foreach(
+                        fun({NextPid, Dests}) ->
+                            lists:foreach(
+                                fun(Dest) ->
+                                    ets:insert(Table, {Dest, NextPid})
+                                end,
+                            Dests)
+                        end,
+                        Edges),
+                    []
+                end},
+    receive
+        {committed, NewPid, 0} ->
+            RootPid ! {control, self(), self(), SeqNum,
+                fun(Name, Table) ->
+                    case Name of
+                        % add new node
+                        From ->
+                            ets:insert(Table, {NodeName, NewPid});
+                        % if Dest == From, add new node
+                        _ ->
+                            case ets:member(Table, From) of
+                                true ->
+                                    NextPid = ets:lookup_element(Table, From, 2),
+                                    ets:insert(Table, {NodeName, NewPid});
+                                false ->
+                                    do_nothing
+                            end
+                    end,
+                    []
+                end},
+            receive
+                {committed, RootPid, SeqNum} ->
+                    % update $NoInEdges'
+                    RootPid ! {control, self(), self(), 1,
+                    fun(Name, Table) ->
+                        []
+                    end},
+                    true;
+                {abort , RootPid, SeqNum} ->
+                    false
+            end;
+        {abort , NewPid, 0} ->
+            io:format ("*** ERROR: Extend network failed!~n"),
+            false
+    end.
