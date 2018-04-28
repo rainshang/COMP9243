@@ -224,7 +224,12 @@ listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTab
             From ! {table, self(), ets:match(RoutingTable, '$1')},
             listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         stop ->
-            ok
+            case ets:first(CtrlSeqReceivedTable) of
+                '$end_of_table' ->
+                    exit(stop);
+                _ ->
+                    engaged2PC
+            end
     end. 
 
 copyTable(Src, Dest) ->
