@@ -8,10 +8,10 @@ start(RouterName) ->
         end).
 
 init(RouterName) ->
-    % init routing table and its backup
+    % init routing table and temp table
     RoutingTable = ets:new('RoutingTable', []),
     ets:insert(RoutingTable, {'$NoInEdges', 0}),
-    RoutingTableBackup = ets:new('RoutingTableBackup', []),
+    RoutingTableTemp = ets:new('RoutingTableTemp', []),
 
     % init edge in set
     EdgeInSet = ets:new('EdgeInSet', []),
@@ -21,23 +21,31 @@ init(RouterName) ->
     CtrlSeqForwardingTable = ets:new('CtrlSeqForwardingTable', []),
     
     % loop listen
-    listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable).
+    listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable).
 
-listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable) ->
+listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable) ->
     receive
         {control, From, Pid, SeqNum, ControlFun} ->
             if
                 % initialisation, callback the func directly, without any 2PC
                 SeqNum == 0 ->
-                    ControlFun(RouterName, RoutingTable),
-                    io:format("~w(~w)'s routing table:", [RouterName, self()]),
-                    lists:foreach(
-                        fun(Element) ->
-                            io:format(" ~w", [Element])
-                        end,
-                        ets:tab2list(RoutingTable)),
-                    io:format("~n"),
-                    From ! {committed, self(), SeqNum};
+                    copyTable(RoutingTable, RoutingTableTemp),
+                    case ControlFun(RouterName, RoutingTableTemp) of
+                        abort ->
+                            From ! {abort, self(), SeqNum};
+                        _ ->
+                            % doCommit
+                            copyTable(RoutingTableTemp, RoutingTable),
+                            % io:format("~w(~w)'s routing table:", [RouterName, self()]),
+                            % lists:foreach(
+                            %     fun(Element) ->
+                            %         io:format(" ~w", [Element])
+                            %     end,
+                            %     ets:tab2list(RoutingTable)),
+                            % io:format("~n"),
+                            From ! {committed, self(), SeqNum}
+                    end;
+                    
                 % normal control sequence
                 true ->
                     % update $NoInEdges
@@ -53,7 +61,7 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                                 false ->
                                     % no, log this in edge, in++
                                     ets:insert(EdgeInSet, {From}),
-                                    io:format("~w's '$NoInEdges': ~w~n", [RouterName, ets:lookup_element(RoutingTable, '$NoInEdges', 2) + 1]),
+                                    % io:format("~w's in degree: ~w~n", [RouterName, ets:lookup_element(RoutingTable, '$NoInEdges', 2) + 1]),
                                     ets:update_counter(RoutingTable, '$NoInEdges', 1);
                                 true ->
                                     already_count
@@ -64,7 +72,7 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                     case ets:member(CtrlSeqReceivedTable, SeqNum) of
                         % yes, has received, using the forwarding chain, give back a mock committed result
                         true ->
-                            From ! {committed, self(), Pid, SeqNum, ControlFun};
+                            From ! {committed, self(), Pid, SeqNum, ControlFun, true};
                         % no, new control seqence coming in
                         false ->
                             % log the SeqNum and From
@@ -94,12 +102,17 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                                 ets:tab2list(RoutingTable))
                     end
             end,
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
-        {committed, From, Pid, SeqNum, ControlFun} ->
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+        {committed, From, Pid, SeqNum, ControlFun, IsMock} ->
             % get SeqNum's ForwardingSet
             ForwardingSet = ets:lookup_element(CtrlSeqForwardingTable, SeqNum, 2),
-            % log From returned 
-            ets:update_element(ForwardingSet, From, {2, true}),
+            case IsMock of
+                true ->
+                    ets:delete(ForwardingSet, From);
+                false ->
+                    % log From returned 
+                    ets:update_element(ForwardingSet, From, {2, true})
+            end,
             % check all return with &&
             AllCommitted = ets:foldl(
                 fun({Node, Status}, Acc) ->
@@ -112,8 +125,8 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                 true ->
                     % get who sent this SeqNum
                     Parent = ets:lookup_element(CtrlSeqReceivedTable, SeqNum, 2),
-                    backupRoutingTable(RoutingTable, RoutingTableBackup),
-                    case ControlFun(RouterName, RoutingTable) of
+                    copyTable(RoutingTable, RoutingTableTemp),
+                    case ControlFun(RouterName, RoutingTableTemp) of
                         % failed
                         abort ->
                             if
@@ -130,13 +143,13 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                                     Parent ! {committed, self (), SeqNum},
                                     self() ! {doCommit, SeqNum};
                                 true ->
-                                    Parent ! {committed, self (), Pid, SeqNum, ControlFun}
+                                    Parent ! {committed, self (), Pid, SeqNum, ControlFun, false}
                             end
                     end;
                 false ->
                     go_on
             end,
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {abort, From, Pid, SeqNum, ControlFun} ->
             % get SeqNum's ForwardingSet
             ForwardingSet = ets:lookup_element(CtrlSeqForwardingTable, SeqNum, 2),
@@ -145,7 +158,7 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                 fun({Node, Status}) ->
                     case Status of
                         true ->
-                            Node ! doAbort;
+                            Node ! {doAbort, SeqNum};
                         false ->
                             false
                     end
@@ -161,10 +174,8 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
             end,
             ets:delete(CtrlSeqForwardingTable, SeqNum),
             ets:delete(CtrlSeqReceivedTable, SeqNum),
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {doAbort, SeqNum} ->
-            % roll back
-            recoverRoutingTable(RoutingTable, RoutingTableBackup),
             % get SeqNum's ForwardingSet
             ForwardingSet = ets:lookup_element(CtrlSeqForwardingTable, SeqNum, 2),
             % send doAbort to all the routers who have committed
@@ -172,7 +183,7 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                 fun({Node, Status}) ->
                     case Status of
                         true ->
-                            Node ! doAbort;
+                            Node ! {doAbort, SeqNum};
                         false ->
                             false
                     end
@@ -180,39 +191,45 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                 ets:tab2list(ForwardingSet)),
             ets:delete(CtrlSeqForwardingTable, SeqNum),
             ets:delete(CtrlSeqReceivedTable, SeqNum),
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {doCommit, SeqNum} ->
+            copyTable(RoutingTableTemp, RoutingTable),
             % get SeqNum's ForwardingSet
             ForwardingSet = ets:lookup_element(CtrlSeqForwardingTable, SeqNum, 2),
             % send doCommit
             lists:foreach(
                 fun({Node, _}) ->
-                    Node ! doCommit
+                    Node ! {doCommit, SeqNum}
                 end,
                 ets:tab2list(ForwardingSet)),
             ets:delete(CtrlSeqForwardingTable, SeqNum),
             ets:delete(CtrlSeqReceivedTable, SeqNum),
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {message, Dest, From, Pid, Trace} ->
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            if
+                % arrive
+                Dest == RouterName ->
+                    Pid ! {trace, self(), lists:append(Trace, [RouterName])};
+                true ->
+                    case ets:member(RoutingTable, Dest) of
+                        true ->
+                            ForwardPid = ets:lookup_element(RoutingTable, Dest, 2),
+                            ForwardPid ! {message, Dest, self(), Pid, lists:append(Trace, [RouterName])};
+                        false ->
+                            not_reachable
+                    end
+            end,
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {dump, From} ->
-            listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
+            listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         stop ->
             ok
     end. 
 
-backupRoutingTable(RoutingTable, RoutingTableBackup) ->
-    ets:delete_all_objects(RoutingTableBackup),
+copyTable(Src, Dest) ->
+    ets:delete_all_objects(Dest),
     lists:foreach(
         fun(Element) ->
-            ets:insert(RoutingTableBackup, Element)
+            ets:insert(Dest, Element)
         end,
-        ets:tab2list(RoutingTable)).
-
-recoverRoutingTable(RoutingTable, RoutingTableBackup) ->
-    ets:delete_all_objects(RoutingTable),
-    lists:foreach(
-        fun(Element) ->
-            ets:insert(RoutingTable, Element)
-        end,
-        ets:tab2list(RoutingTableBackup)).
+        ets:tab2list(Src)).
