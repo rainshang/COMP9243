@@ -8,25 +8,73 @@ simpleNetworkGraph() ->
    {green, [{red, [red, blue, white]}]}].
 
 graphToNetwork([]) ->
-    case lists:member(namePidMap, ets:all()) of
-        true -> ets:delete(namePidMap);
-        false -> not_existing
-    end,
-    ets:new(namePidMap, [named_table, set]);
+    empty_graph;
 
 graphToNetwork(Graph) ->
-    graphToNetwork([]),
+    % init name_pid map
+    NamePidMap = ets:new('NamePidMap', []),
+    % foreach to start node and set name_Pid in table
     lists:foreach(
-        fun(Node) ->
-            ets:insert(namePidMap, startNode(Node))
+        fun({Name, _}) ->
+            ets:insert(NamePidMap, startNode(Name))
         end,
         Graph),
-    ets:tab2list(namePidMap).
+    % send init control sequence to each router directly
+    lists:foreach(
+        fun({Name, Edges}) ->
+            Pid = getPidByName(Name, NamePidMap),
+            Pid ! {control, self(), self(), 0,
+                fun(Name, Table) ->
+                    lists:foreach(
+                        fun({Next, Dests}) ->
+                            NextPid = getPidByName(Next, NamePidMap),
+                            lists:foreach(
+                                fun(Dest) ->
+                                    ets:insert(Table, {Dest, NextPid})
+                                end,
+                            Dests)
+                        end,
+                        Edges),
+                    []
+                end},
+            receive
+                {committed, Pid, SeqNum} ->
+                    ok
+            end
+        end,
+        Graph),
+    % using first key to update $NoInEdges'
+    FristPid = getPidByName(ets:first(NamePidMap), NamePidMap),
+    FristPid ! {control, self(), self(), 1,
+                fun(Name, Table) ->
+                    []
+                end},
+    receive
+        {committed, FristPid, InitSeqNum} ->
+            io:format ("*** ...done.~n");
+        {abort , FristPid, InitSeqNum} ->
+            io:format ("*** ERROR: Configuration failed!~n")
+    after 5000 ->
+        io:format ("*** ERROR: Configuration timed out!~n")
+    end,
+    FristPid.
 
-startNode(Node) ->
-    {Name, Edges} = Node,
+startNode(Name) ->
     Pid = router:start(Name),
+    % io:format("~w:~w~n", [Name, Pid]),
     {Name, Pid}.
+
+getPidByName(Name, NamePidMap) ->
+    ets:lookup_element(NamePidMap, Name, 2).
+
+% convert {Next, Dests} to {Pid, Dests}
+% edgesHelper(Edge) ->
+%     {Next, Dests} = Edge,
+%     {getPidByName(Next), Dests}.
+
+extendNetwork(RootPid, SeqNum, From, {NodeName, Edges}) ->
+    
+    1.
 
 % generateNodeNamePidMap(_, Name, Pid) ->
 %     #{Name => Pid}.
@@ -59,9 +107,3 @@ startNode(Node) ->
 % generateNextNodeRouteTable(NextNode, DestNodes) ->
 
 % generateNextNodeRouteTable(NextNode, DestNodes) ->
-
-
-
-
-extendNetwork(RootPid, SeqNum, From, {NodeName, Edges}) ->
-    1.
