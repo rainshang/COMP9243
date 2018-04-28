@@ -23,7 +23,6 @@ init(RouterName) ->
     % loop listen
     listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable).
 
-
 listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable) ->
     receive
         {control, From, Pid, SeqNum, ControlFun} ->
@@ -45,7 +44,8 @@ listen(RouterName, RoutingTable, RoutingTableBackup, EdgeInSet, CtrlSeqReceivedT
                     if
                         % coming from controller
                         Pid == From ->
-                            next_step;
+                            % reset EdgeInSet
+                            ets:delete_all_objects(EdgeInSet);
                         % coming from other router
                         true ->
                             % whether in EdgeInSet
