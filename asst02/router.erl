@@ -221,6 +221,7 @@ listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTab
             end,
             listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         {dump, From} ->
+            From ! {table, self(), ets:match(RoutingTable, '$1')},
             listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
         stop ->
             ok
