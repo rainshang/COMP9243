@@ -1,0 +1,50 @@
+control.erl
+--Basicially the strategy in this module is sending SeqNum0 control directly to the routers and implementing the callback functions.
+    --graphToNetwork
+        First, call the 'router:start' to spawn all the routers.
+        Then send SeqNum0 control directly to each router. In callback function, fulfill the routing table of each router.
+        Last, send a non SeqNum0 control to the root router, with an empty callback function(do nothing), to traverse all the routers by routing tables. The reason is to use this traverse to update the in degree of each router. The specific implement will be shown in router.erl .
+    --extendNetwork
+        Similar as in graphToNetwork, using SeqNum0 control create the new router and its routing table first.
+        Then send the given 'SeqNum' control to the root router. In callback function,
+        --add a 'NewRouter, NewRouterPid' into 'From''s routing table;
+        --for any router which can acheive the destination 'From' via 'NextPid', add a 'NewRouter, NextPid' into its routing table.
+        Last, send a non SeqNum0 control to the root router to update the in degree.
+
+router.erl
+--This moudle mainly maintain a loop to listen some kinds of messages.
+    --{control, From, Pid, SeqNum, ControlFun}
+        First, check this router whether is in a 2PC. 
+        If not or in the same 'SeqNum' control, call 'focusOneControl' to handle this;
+        If 'SeqNum' is a new control, abort the new 'control'.
+    --focusOneControl
+        Implement the real logic for {control, From, Pid, SeqNum, ControlFun}.
+        In 'ControlFun', all the modification are on a 'RoutingTableTemp', which is a copy of current 'RoutingTable' and only commited to the origin when received 'doCommit'. Thus, this 'ControlFun' is actually a 'canCommit' fucntion in 2PC.
+        It check 'SeqNum' == 0. True, call callback and send back the result; false,
+        --if is root router, reset EdgeInSet to log every in edge, to calculate the in degree of this router, '$NoInEdges'.
+        --not the root router, check whether already receive the 'SeqNum' control
+            --yes, shortcut this route by sending a mock 'commited'. The reason is it should focus on one valid process, ontherwise the control meassge will be infinite.
+            --no, log this 'SeqNum' control and its 'From', forward this control to all the reachable routers in 'RoutingTable' and log them
+    --{committed, From, Pid, SeqNum, ControlFun, IsMock}
+        if a shortcut, just ignore it by omitting it.
+        check whether all the forwards have sent back committed,
+        --yes, call the 'ControlFun' as in 'focusOneControl' and send back result
+            --if result is abort, doAbort to all the committed siblings and children
+            --if committed
+                --is root, doCommit
+                --not root, send committed back to parent
+        --no, continue waiting for other forwards response
+    --{abort, From, Pid, SeqNum, ControlFun}
+        similar as in '{committed, From, Pid, SeqNum, ControlFun, IsMock}', send doAbort when in root and send back abort when in non-root
+    --{doAbort, SeqNum}
+        abandon modification on 'RoutingTable', actually just ignore the 'RoutingTableTemp', doing nothing.
+        send 'doAbort' to children
+    --{doCommit, SeqNum}
+        apply the modification on 'RoutingTable'.
+        send 'doCommit' to children
+    --{message, Dest, From, Pid, Trace}
+        just forward the ['Trace'|selfName] to the NextPid find in 'RoutingTable'. If selfName == Dest, send the trace to 'Pid'
+    --{dump, From}
+        From ! {table, self(), ets:match(RoutingTable, '$1')}
+    --stop
+        check whether in a 2PC. Yes, do nothing; no, exit.

@@ -92,7 +92,7 @@ extendNetwork(RootPid, SeqNum, From, {NodeName, Edges}) ->
                             case ets:member(Table, From) of
                                 true ->
                                     NextPid = ets:lookup_element(Table, From, 2),
-                                    ets:insert(Table, {NodeName, NewPid});
+                                    ets:insert(Table, {NodeName, NextPid});
                                 false ->
                                     do_nothing
                             end

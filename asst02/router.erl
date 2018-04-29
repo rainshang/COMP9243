@@ -170,7 +170,8 @@ listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTab
                 '$end_of_table' ->
                     exit(stop);
                 _ ->
-                    engaged2PC
+                    % is engaged in a 2PC, do nothing
+                    listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable)
             end
     end.
 
