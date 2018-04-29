@@ -26,95 +26,22 @@ init(RouterName) ->
 listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable) ->
     receive
         {control, From, Pid, SeqNum, ControlFun} ->
-
             % two 2PC must abort one
-            % not good implememt, need optimization
+            % here I give up the new one
             case ets:first(CtrlSeqReceivedTable) of
                 '$end_of_table' ->
-                    go_on;
+                    % empty, go on
+                    focusOneControl(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable,
+                        control, From, Pid, SeqNum, ControlFun);
                 _ ->
                     case ets:member(CtrlSeqReceivedTable, SeqNum) of
+                        % same, go on
                         true ->
-                            go_on;
+                            focusOneControl(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable,
+                                control, From, Pid, SeqNum, ControlFun);
                         false ->
+                            % not same, give up new one
                             From ! {abort, self(), SeqNum}
-                    end
-            end,
-
-            if
-                % initialisation, callback the func directly, without any 2PC
-                SeqNum == 0 ->
-                    copyTable(RoutingTable, RoutingTableTemp),
-                    case ControlFun(RouterName, RoutingTableTemp) of
-                        abort ->
-                            From ! {abort, self(), SeqNum};
-                        _ ->
-                            % doCommit
-                            copyTable(RoutingTableTemp, RoutingTable),
-                            % io:format("~w(~w)'s routing table:", [RouterName, self()]),
-                            % lists:foreach(
-                            %     fun(Element) ->
-                            %         io:format(" ~w", [Element])
-                            %     end,
-                            %     ets:tab2list(RoutingTable)),
-                            % io:format("~n"),
-                            From ! {committed, self(), SeqNum}
-                    end;
-                    
-                % normal control sequence
-                true ->
-                    % update $NoInEdges
-                    if
-                        % coming from controller
-                        Pid == From ->
-                            % reset EdgeInSet
-                            ets:delete_all_objects(EdgeInSet);
-                        % coming from other router
-                        true ->
-                            % whether in EdgeInSet
-                            case ets:member(EdgeInSet, From) of
-                                false ->
-                                    % no, log this in edge, in++
-                                    ets:insert(EdgeInSet, {From}),
-                                    % io:format("~w's in degree: ~w~n", [RouterName, ets:lookup_element(RoutingTable, '$NoInEdges', 2) + 1]),
-                                    ets:update_counter(RoutingTable, '$NoInEdges', 1);
-                                true ->
-                                    already_count
-                            end
-                    end,
-
-                    % check whether already received this control seqence
-                    case ets:member(CtrlSeqReceivedTable, SeqNum) of
-                        % yes, has received, using the forwarding chain, give back a mock committed result
-                        true ->
-                            From ! {committed, self(), Pid, SeqNum, ControlFun, true};
-                        % no, new control seqence coming in
-                        false ->
-                            % log the SeqNum and From
-                            ets:insert(CtrlSeqReceivedTable, {SeqNum, From}),
-                            % log the routers which sequence is being forwarded to 
-                            ForwardingSet = ets:new('ForwardingSet', []),
-                            ets:insert(CtrlSeqForwardingTable, {SeqNum, ForwardingSet}),
-                            % forward to the routers in routing table
-                            lists:foreach(
-                                fun({Dest, NextPid}) ->
-                                    if
-                                        % ignore '$NoInEdges'
-                                        Dest == '$NoInEdges' ->
-                                            Dest;
-                                        % real routing table element
-                                        true ->
-                                            case ets:member(ForwardingSet, NextPid) of
-                                                % already sent
-                                                true ->
-                                                    true;
-                                                false ->
-                                                    ets:insert(ForwardingSet, {NextPid, false}),
-                                                    NextPid ! {control, self(), Pid, SeqNum, ControlFun}
-                                            end
-                                    end
-                                end,
-                                ets:tab2list(RoutingTable))
                     end
             end,
             listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable);
@@ -244,6 +171,85 @@ listen(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTab
                     exit(stop);
                 _ ->
                     engaged2PC
+            end
+    end.
+
+focusOneControl(RouterName, RoutingTable, RoutingTableTemp, EdgeInSet, CtrlSeqReceivedTable, CtrlSeqForwardingTable,
+    control, From, Pid, SeqNum, ControlFun) ->
+    if
+        % initialisation, callback the func directly, without any 2PC
+        SeqNum == 0 ->
+            copyTable(RoutingTable, RoutingTableTemp),
+            case ControlFun(RouterName, RoutingTableTemp) of
+                abort ->
+                    From ! {abort, self(), SeqNum};
+                _ ->
+                    % doCommit
+                    copyTable(RoutingTableTemp, RoutingTable),
+                    % io:format("~w(~w)'s routing table:", [RouterName, self()]),
+                    % lists:foreach(
+                    %     fun(Element) ->
+                    %         io:format(" ~w", [Element])
+                    %     end,
+                    %     ets:tab2list(RoutingTable)),
+                    % io:format("~n"),
+                    From ! {committed, self(), SeqNum}
+            end;
+            
+        % normal control sequence
+        true ->
+            % update $NoInEdges
+            if
+                % coming from controller
+                Pid == From ->
+                    % reset EdgeInSet
+                    ets:delete_all_objects(EdgeInSet);
+                % coming from other router
+                true ->
+                    % whether in EdgeInSet
+                    case ets:member(EdgeInSet, From) of
+                        false ->
+                            % no, log this in edge, in++
+                            ets:insert(EdgeInSet, {From}),
+                            % io:format("~w's in degree: ~w~n", [RouterName, ets:lookup_element(RoutingTable, '$NoInEdges', 2) + 1]),
+                            ets:update_counter(RoutingTable, '$NoInEdges', 1);
+                        true ->
+                            already_count
+                    end
+            end,
+    
+            % check whether already received this control seqence
+            case ets:member(CtrlSeqReceivedTable, SeqNum) of
+                % yes, has received, using the forwarding chain, give back a mock committed result
+                true ->
+                    From ! {committed, self(), Pid, SeqNum, ControlFun, true};
+                % no, new control seqence coming in
+                false ->
+                    % log the SeqNum and From
+                    ets:insert(CtrlSeqReceivedTable, {SeqNum, From}),
+                    % log the routers which sequence is being forwarded to 
+                    ForwardingSet = ets:new('ForwardingSet', []),
+                    ets:insert(CtrlSeqForwardingTable, {SeqNum, ForwardingSet}),
+                    % forward to the routers in routing table
+                    lists:foreach(
+                        fun({Dest, NextPid}) ->
+                            if
+                                % ignore '$NoInEdges'
+                                Dest == '$NoInEdges' ->
+                                    Dest;
+                                % real routing table element
+                                true ->
+                                    case ets:member(ForwardingSet, NextPid) of
+                                        % already sent
+                                        true ->
+                                            true;
+                                        false ->
+                                            ets:insert(ForwardingSet, {NextPid, false}),
+                                            NextPid ! {control, self(), Pid, SeqNum, ControlFun}
+                                    end
+                            end
+                        end,
+                        ets:tab2list(RoutingTable))
             end
     end.
 
