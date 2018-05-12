@@ -23,10 +23,12 @@ we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
 --watchdog
     --check the aggregate CPU usage
     if(cpu usage > 50%)
-        if(len_sqs > num_EC2 * 2)
+        if(cpu usage > 80%
+            || len_sqs > num_EC2 * 2)
             create a new EC2 instance, no more than --scale_to
     else
-        if(len_sqs < num_EC2 / 2)
+        if(cpu usage < 20%
+            || len_sqs < num_EC2 / 2)
             shutdown all the idle EC2 instance, leave one(as the standby in 'setup')
 
 --cleanup
