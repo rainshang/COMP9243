@@ -1,0 +1,36 @@
+--setup
+    --create 2 'input' and 'output' S3 buckets
+    --create 'SQS'
+    --create an EC2 instance for 'client'
+    --create an EC2 instance for 'watchdog'
+    --create an AMI instance for forking 'transcode service'
+    --ssh the AMI to create one standby 'transcode service'
+
+--client
+    --upload image to 'input', using timestamp to name the temporary directory
+    --generate the message for this task and send it to 'SQS'
+    --using a timer to check the output directory if flag is --wait
+
+--transcode service
+    --use 'crontab' command to execute task(default every one minute) on each VM, using 'flock' to avoid multitask running simultaneously.
+    --in the task,
+        --receive msg from 'SQS'
+            --create a thread to update the visibility timeout to 120s, using a 110s timer, until the encoding proccess is done.
+            --create a thread to do the transcode task
+
+--watchdog
+    --check the aggregate CPU usage
+    if(cpu usage > 50%)
+        if(len_sqs > num_EC2 * 2)
+            create a new EC2 instance, no more than --scale_to
+    else
+        if(len_sqs < num_EC2 / 2)
+            shutdown all the idle EC2 instance, leave one(as the standby in 'setup')
+
+--cleanup
+    --delete 'SQS'
+    --delete S3
+    --delete 'client', 'watchdog', all 'transcode service'
+    --delete AMI
+    --others
+
