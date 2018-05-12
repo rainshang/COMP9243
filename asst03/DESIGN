@@ -1,10 +1,12 @@
+we use python3 as the main programming language to implement assignment 3.
+we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
+
 --setup
     --create 2 'input' and 'output' S3 buckets
     --create 'SQS'
-    --create an EC2 instance for 'client'
-    --create an EC2 instance for 'watchdog'
-    --create an AMI instance for forking 'transcode service'
-    --ssh the AMI to create one standby 'transcode service'
+    --create an EC2 instance for 'client' with the specific AMI 'ami–96666ff5', uploading the python script onto this VM
+    --create an EC2 instance for 'watchdog' with the specific AMI 'ami–96666ff5', uploading the python script onto this VM
+    --create an EC2 instance for the standby 'transcode service' with the specific AMI 'ami–96666ff5', uploading the python script onto this VM. A new 'service' instance will clone from this one or the others.
 
 --client
     --upload image to 'input', using timestamp to name the temporary directory
