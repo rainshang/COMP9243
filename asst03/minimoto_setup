@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+import sys
+from commonlib import *
+
+def main():
+    if len(sys.argv) != 4:
+        raise AttributeError('Paramaters format should be "keyfile aws_access_key_id aws_secret_access_key"')
+    # read paramaters
+    keyfile = sys.argv[1]
+    aws_access_key_id = sys.argv[2]
+    aws_secret_access_key = sys.argv[3]
+    # save to config.json
+    saveConfig(keyfile, aws_access_key_id, aws_secret_access_key)
+    '''create SQS'''
+    sqs = boto3Resource('sqs')
+    sqsUrl = sqs.create_queue(
+        QueueName = NAME_SQS,
+        Attributes = {
+            'VisibilityTimeout': TIMEOUT_SQS_MSG
+        })['QueueUrl']
+    '''create S3 buckets'''
+    s3 = boto3Resource('s3')
+    bucket_input = s3.create_bucket(
+        Bucket = NAME_BUCKET_INPUT,
+        CreateBucketConfiguration = {
+            'LocationConstraint': REGION
+        })
+    bucket_output = s3.create_bucket(
+        Bucket = NAME_BUCKET_OUTPUT,
+        CreateBucketConfiguration = {
+            'LocationConstraint': REGION
+        })
+
+if __name__ == '__main__':
+    main()

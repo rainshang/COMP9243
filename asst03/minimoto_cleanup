@@ -1,0 +1,16 @@
+#!/usr/bin/python3
+from commonlib import *
+
+def main():
+    # read config.json
+    s3 = boto3Resource('s3')
+    # use the controller to delete 'input' and 'output' buckets
+    bucket_input = s3.Bucket(NAME_BUCKET_INPUT)
+    bucket_input.objects.all().delete()
+    bucket_input.delete()
+    bucket_output = s3.Bucket(NAME_BUCKET_OUTPUT)
+    bucket_output.objects.all().delete()
+    bucket_output.delete()    
+
+if __name__ == '__main__':
+    main()
