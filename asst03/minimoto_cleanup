@@ -2,9 +2,13 @@
 from commonlib import *
 
 def main():
-    # read config.json
+    """clean SQS"""
+    sqs = boto3Resource('sqs')
+    config = getConfig()
+    queue = sqs.Queue(config[CONFIG_SQS_URL])
+    queue.delete()
+    """clean S3 buckets"""
     s3 = boto3Resource('s3')
-    # use the controller to delete 'input' and 'output' buckets
     bucket_input = s3.Bucket(NAME_BUCKET_INPUT)
     bucket_input.objects.all().delete()
     bucket_input.delete()
