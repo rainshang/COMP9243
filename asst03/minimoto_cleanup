@@ -3,12 +3,12 @@ from commonlib import *
 
 def main():
     """clean SQS"""
-    sqs = boto3Resource('sqs')
-    config = getConfig()
+    sqs = boto3_resource('sqs')
+    config = get_config()
     queue = sqs.Queue(config[CONFIG_SQS_URL])
     queue.delete()
     """clean S3 buckets"""
-    s3 = boto3Resource('s3')
+    s3 = boto3_resource('s3')
     bucket_input = s3.Bucket(NAME_BUCKET_INPUT)
     bucket_input.objects.all().delete()
     bucket_input.delete()

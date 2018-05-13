@@ -16,30 +16,30 @@ CONFIG_KEYID = 'aws_access_key_id'
 CONFIG_KEY = 'aws_secret_access_key'
 CONFIG_SQS_URL = 'sqs_url'
 
-def __checkBoto3():
+def __check_Boto3():
     if importlib.util.find_spec('boto3') is None:
         # use pip to install boto3
         os.system('pip3 install boto3')
 
-def addConfig(newDict):
-    with open(__CONFIG_FILE_NAME, 'w+') as configFile:
-        try:
-            config = json.load(configFile)
-        except json.decoder.JSONDecodeError:
-            config = {}
-    config.update(newDict)
-    with open(__CONFIG_FILE_NAME, 'w') as configFile:
-        json.dump(config, configFile)
+def add_config(new_dict):
+    if not os.path.exists(__CONFIG_FILE_NAME):
+        config = {}
+    else:
+        with open(__CONFIG_FILE_NAME) as config_file:
+            config = json.load(config_file)
+    config.update(new_dict)
+    with open(__CONFIG_FILE_NAME, 'w') as config_file:
+        json.dump(config, config_file)
 
-def getConfig():
-    with open(__CONFIG_FILE_NAME) as configFile:
-        return json.load(configFile)
+def get_config():
+    with open(__CONFIG_FILE_NAME) as config_file:
+        return json.load(config_file)
 
-def boto3Resource(service_name):
-    __checkBoto3()
+def boto3_resource(service_name):
+    __check_Boto3()
     import boto3
-    config = getConfig()
+    config = get_config()
     return boto3.resource(service_name,
-            aws_access_key_id = config[CONFIG_KEYID],
-            aws_secret_access_key = config[CONFIG_KEY],
-            region_name = REGION)
+        aws_access_key_id = config[CONFIG_KEYID],
+        aws_secret_access_key = config[CONFIG_KEY],
+        region_name = REGION)

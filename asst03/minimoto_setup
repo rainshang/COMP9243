@@ -9,25 +9,25 @@ def main():
     aws_access_key_id = sys.argv[2]
     aws_secret_access_key = sys.argv[3]
     """save to config file"""
-    addConfig(
+    add_config(
         {
             CONFIG_KEYID: aws_access_key_id,
             CONFIG_KEY: aws_secret_access_key
         })
     """create SQS"""
-    sqs = boto3Resource('sqs')
-    sqsUrl = (sqs.create_queue(
+    sqs = boto3_resource('sqs')
+    queue = sqs.create_queue(
         QueueName = NAME_SQS,
         Attributes = {
             'VisibilityTimeout': TIMEOUT_SQS_MSG
-        }))['QueueUrl']
-    addConfig(
+        })
+    add_config(
         {
-            CONFIG_SQS_URL: sqsUrl
+            CONFIG_SQS_URL: queue.url
         }
     )
     """create S3 buckets"""
-    s3 = boto3Resource('s3')
+    s3 = boto3_resource('s3')
     bucket_input = s3.create_bucket(
         Bucket = NAME_BUCKET_INPUT,
         CreateBucketConfiguration = {
