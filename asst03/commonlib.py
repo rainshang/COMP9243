@@ -3,15 +3,20 @@ import importlib
 import os
 import json
 
+DEBUG = True
+
 DOMAIN = 'au.edu.unsw.comp9243.group4'
 NAME_BUCKET_INPUT = DOMAIN + '.bucket.input'
 NAME_BUCKET_OUTPUT = DOMAIN + '.bucket.output'
 REGION = 'ap-southeast-2'
 NAME_SQS = (DOMAIN + '.sqs.transcodetask').replace('.', '_')
 TIMEOUT_SQS_MSG = '120'
+NAME_SECURITY_GROUP = DOMAIN
+AMI = 'ami-d38a4ab1' if DEBUG else 'ami–96666ff5'
+INSTANCE_TYPE = 't2.micro' if DEBUG else 't2.small'
 
 __CONFIG_FILE_NAME = 'setup.json'
-CONFIG_KEYFILE = 'keyfile'
+CONFIG_KEYFILE_NAME = 'keyfile_name'
 CONFIG_KEYID = 'aws_access_key_id'
 CONFIG_KEY = 'aws_secret_access_key'
 CONFIG_SQS_URL = 'sqs_url'
@@ -20,6 +25,9 @@ def __check_Boto3():
     if importlib.util.find_spec('boto3') is None:
         # use pip to install boto3
         os.system('pip3 install boto3')
+
+def get_file_name(path):
+    return os.path.splitext(os.path.basename(path))[0]
 
 def add_config(new_dict):
     if not os.path.exists(__CONFIG_FILE_NAME):
