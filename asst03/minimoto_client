@@ -1,0 +1,60 @@
+#!/usr/bin/python3
+import sys
+import uuid
+import os
+import time
+from commonlib import *
+
+def upload_image(image_dir, input_bucket, u_uid):
+    s3 = boto3_resource('s3')
+    bucket = s3.Bucket(input_bucket)
+    bucket_dir = u_uid
+
+    for image in os.listdir(image_dir):
+        bucket.upload_file(os.path.join(image_dir, image), bucket_dir + '/' + image)
+
+    print('upload image done')
+
+    config = get_config()
+    sqs_url = config[CONFIG_SQS_URL]
+    sqs = boto3_client('sqs')
+    sqs.send_message(QueueUrl = sqs_url, MessageBody = (bucket_dir))
+
+    print('send message to sqs done')
+
+def wait_video(output_bucket, video_name):
+    client = boto3_client('s3')
+    waiter = client.get_waiter('object_exists')
+    waiter.wait(Bucket = output_bucket, Key = video_name)
+    return True
+
+
+if __name__ == "__main__":
+    if (len(sys.argv) < 4):
+        print("enter valid arguments")
+        exit(0)
+
+    wait_flag = 0
+    if sys.argv[1] == "--wait":
+        wait_flag = 1
+
+    if wait_flag:
+        image_dir = sys.argv[2]
+        input_bucket = sys.argv[3]
+        output_bucket = sys.argv[4]
+    else:
+        image_dir = sys.argv[1]
+        input_bucket = sys.argv[2]
+        output_bucket = sys.argv[3]
+
+    u_uid = str(uuid.uuid4())
+    upload_image(image_dir, input_bucket, u_uid)
+    video_name = os.path.join(u_uid + ".mp4")
+    if wait_flag:
+        print('waiting for video....')
+        while 1:
+            time.sleep(1)
+            if wait_video(output_bucket, video_name):
+                break
+
+    print("You'll find the output in s3://" + os.path.join(output_bucket,video_name))

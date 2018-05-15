@@ -6,8 +6,8 @@ import json
 DEBUG = True
 
 DOMAIN = 'au.edu.unsw.comp9243.group4'
-NAME_BUCKET_INPUT = DOMAIN + '.bucket.input'
-NAME_BUCKET_OUTPUT = DOMAIN + '.bucket.output'
+NAME_BUCKET_INPUT = DOMAIN + '.bucket.in'
+NAME_BUCKET_OUTPUT = DOMAIN + '.bucket.out'
 REGION = 'ap-southeast-2'
 NAME_SQS = (DOMAIN + '.sqs.transcodetask').replace('.', '_')
 TIMEOUT_SQS_MSG = '120'
@@ -48,6 +48,15 @@ def boto3_resource(service_name):
     import boto3
     config = get_config()
     return boto3.resource(service_name,
+        aws_access_key_id = config[CONFIG_KEYID],
+        aws_secret_access_key = config[CONFIG_KEY],
+        region_name = REGION)
+
+def boto3_client(service_name):
+    __check_Boto3()
+    import boto3
+    config = get_config()
+    return boto3.client(service_name,
         aws_access_key_id = config[CONFIG_KEYID],
         aws_secret_access_key = config[CONFIG_KEY],
         region_name = REGION)

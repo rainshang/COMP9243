@@ -14,7 +14,7 @@ def main():
     bucket_input.delete()
     bucket_output = s3.Bucket(NAME_BUCKET_OUTPUT)
     bucket_output.objects.all().delete()
-    bucket_output.delete()    
-
+    bucket_output.delete()
+    
 if __name__ == '__main__':
     main()
