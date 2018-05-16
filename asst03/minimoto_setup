@@ -61,22 +61,16 @@ def main():
     )
     """create EC2 instances"""
     client = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_CLIENT)
-    ssh_do_cmd(keyfile, client, CMD_INSTALL_PIP)
-    ssh_do_cmd(keyfile, client, CMD_INSTALL_BOTO3)
-    upload_executable(keyfile, 'commonlib.py', client)
+    setup_common_stuff(keyfile, client)
     upload_executable(keyfile, 'minimoto_client', client)
 
     watchdog = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_WATCHDOG)
-    ssh_do_cmd(keyfile, watchdog, CMD_INSTALL_PIP)
-    ssh_do_cmd(keyfile, watchdog, CMD_INSTALL_BOTO3)
-    upload_executable(keyfile, 'commonlib.py', watchdog)
+    setup_common_stuff(keyfile, watchdog)
     upload_executable(keyfile, 'minimoto_watchdog', watchdog)
 
     origin_transcode_service = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_TRANSCODE_SERVICE)
-    ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_PIP)
-    ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_BOTO3)
+    setup_common_stuff(keyfile, origin_transcode_service)
     ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_TRANSCODE_SUPPORT)
-    upload_executable(keyfile, 'commonlib.py', origin_transcode_service)
     upload_executable(keyfile, 'minimoto_transcode', origin_transcode_service)
     upload_executable(keyfile, 'minimoto_transcode.sh', origin_transcode_service)
     scp_upload(keyfile, 'transcode.cron', origin_transcode_service)
@@ -92,6 +86,14 @@ def main():
     print("WATCHDOG_ADDR={}".format(watchdog.public_dns_name))
     print("SERVICE_USER={}".format(ASW_EC2_USER))
     print("SERVICE_AMI={}".format(DEFAULT_AMI))
+
+def setup_common_stuff(pem, host_instance):
+    ssh_do_cmd(pem, host_instance, CMD_SAVE_INSTANCE_ID.format(instance_id = host_instance.instance_id))
+    ssh_do_cmd(pem, host_instance, CMD_INSTALL_PIP)
+    ssh_do_cmd(pem, host_instance, CMD_INSTALL_BOTO3)
+    scp_upload(pem, 'setup.json', host_instance)
+    ssh_do_cmd(pem, host_instance, CMD_CHMOD.format(mode = 600, file = 'setup.json'))
+    scp_upload(pem, 'commonlib.py', host_instance)
 
 def upload_executable(pem, file, host_instance):
     scp_upload(pem, file, host_instance)

@@ -42,11 +42,13 @@ CONFIG_KEY = 'aws_secret_access_key'
 CONFIG_SQS_URL = 'sqs_url'
 
 ASW_EC2_USER = 'ubuntu'
-CMD_SSH = 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i {pem} {user}@{host}'
-CMD_SCP_UPLOAD = 'scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i {pem} {source} {user}@{host}:{target}'
+CMD_SSH = 'ssh -o StrictHostKeyChecking=no -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
+CMD_SCP_UPLOAD = 'scp -o StrictHostKeyChecking=no -i {pem} {source} {user}@{host}:{target}' + (' > /dev/null 2>&1' if not DEBUG else '')
 CMD_CHMOD = 'chmod {mode} {file}'
 CMD_INSTALL_PIP = 'curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py'
 CMD_INSTALL_BOTO3 = 'sudo pip3 install boto3'
+__FILE_INSTANCE_ID = 'instance_id'
+CMD_SAVE_INSTANCE_ID = 'echo \'{instance_id}\' > ' + __FILE_INSTANCE_ID
 CMD_INSTALL_TRANSCODE_SUPPORT = 'sudo apt-get update && sudo apt-get -y install imagemagick libav-tools'
 CMD_CRON_TRANSCODE = 'crontab transcode.cron'
 
@@ -70,7 +72,7 @@ def ssh_do_cmd(pem, host_instance, cmd):
         user = ASW_EC2_USER,
         host = host_instance.public_dns_name
         )
-        + ' "{}"'.format(cmd))
+        + ' \'{}\''.format(cmd))
 
 def scp_upload(pem, source, host_instance):
     os.system(CMD_SCP_UPLOAD.format(
@@ -140,21 +142,7 @@ def boto3_get_instances(ec2, type):
         ]
     ))
 
-# def boto3_get_self_instance(ec2):
-#     instances = ec2.instances.filter(
-#         Filters = [
-#             INSTANCE_FILTER_GROUP,
-#             {
-#                 'Name': 'tag:' + __INSTANCE_TAG_TYPE,
-#                 'Values': [
-#                     TYPE_TRANSCODE_SERVICE
-#                 ]
-#             },
-#             {
-#                 'Name': 'instance-state-name',
-#                 'Values': [
-#                     'running'
-#                 ]
-#             }
-#         ]
-#     )
+def boto3_get_self_instance(ec2):
+    with open(__FILE_INSTANCE_ID) as file:
+        instance_id = file.readline().strip()
+    return ec2.Instance(instance_id)
