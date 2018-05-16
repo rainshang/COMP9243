@@ -1,0 +1,1 @@
+* * * * * flock -x lock.lock -c 'minimoto_transcode'

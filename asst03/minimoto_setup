@@ -1,19 +1,27 @@
 #!/usr/bin/python3
 import sys
+import os
+import importlib
 from commonlib import *
 
 def main():
     if len(sys.argv) != 4:
-        raise ValueError("Wrong arguments format!\nIt should be 'keyfile aws_access_key_id aws_secret_access_key'")
+        raise ValueError("Wrong paramater format!\nIt should be:\n./minimoto_setup keyfile aws_access_key_id aws_secret_access_key")
     keyfile = sys.argv[1]
     aws_access_key_id = sys.argv[2]
     aws_secret_access_key = sys.argv[3]
     """save to config file"""
     add_config(
         {
+            CONFIG_KEYFILE_NAME: os.path.splitext(os.path.basename(keyfile))[0],
             CONFIG_KEYID: aws_access_key_id,
             CONFIG_KEY: aws_secret_access_key
         })
+    """chmod of keyfile and install boto3"""
+    os.system(CMD_CHMOD.format(mode = 400, file = keyfile))
+    if importlib.util.find_spec('boto3') is None:
+        # it should be sudo, however, on CSE machine, we cannot use sudo...
+        os.system('pip3 install boto3')
     """create SQS"""
     sqs = boto3_resource('sqs')
     queue = sqs.create_queue(
@@ -38,6 +46,51 @@ def main():
         CreateBucketConfiguration = {
             'LocationConstraint': REGION
         })
+    """create EC2 security_group"""
+    ec2 = boto3_resource('ec2')
+    security_group = ec2.create_security_group(
+        Description = NAME_SECURITY_GROUP,
+        GroupName = NAME_SECURITY_GROUP
+    )
+    # setup ssh access
+    security_group.authorize_ingress(
+        CidrIp = '0.0.0.0/0',
+        FromPort = 22,
+        IpProtocol = "tcp",
+        ToPort = 22
+    )
+    """create EC2 instances"""
+    client = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_CLIENT)
+    ssh_do_cmd(keyfile, client, CMD_INSTALL_PIP)
+    ssh_do_cmd(keyfile, client, CMD_INSTALL_BOTO3)
+    scp_upload(keyfile, 'minimoto_client', client)
+    ssh_do_cmd(keyfile, client, CMD_CHMOD.format(mode = 500, file = 'minimoto_client'))
+
+    watchdog = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_WATCHDOG)
+    ssh_do_cmd(keyfile, watchdog, CMD_INSTALL_PIP)
+    ssh_do_cmd(keyfile, watchdog, CMD_INSTALL_BOTO3)
+    scp_upload(keyfile, 'minimoto_watchdog', watchdog)
+    ssh_do_cmd(keyfile, watchdog, CMD_CHMOD.format(mode = 500, file = 'minimoto_watchdog'))
+
+    origin_transcode_service = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_TRANSCODE_SERVICE)
+    ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_PIP)
+    ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_BOTO3)
+    ssh_do_cmd(keyfile, origin_transcode_service, CMD_INSTALL_TRANSCODE_SUPPORT)
+    scp_upload(keyfile, 'minimoto_transcode', origin_transcode_service)
+    ssh_do_cmd(keyfile, origin_transcode_service, CMD_CHMOD.format(mode = 500, file = 'minimoto_transcode'))
+    scp_upload(keyfile, 'transcode.cron', origin_transcode_service)
+    ssh_do_cmd(keyfile, origin_transcode_service, CMD_CRON_TRANSCODE)
+
+    """print all the mandatory out messages"""
+    print("SQS_REQUEST_QUEUE={}".format(NAME_SQS))
+    print("S3_BUCKET_INPUT=s3://{}".format(NAME_BUCKET_INPUT))
+    print("S3_BUCKET_OUTPUT=s3://{}".format(NAME_BUCKET_OUTPUT))
+    print("CLIENT_USER={}".format(ASW_EC2_USER))
+    print("CLIENT_ADDR={}".format(client.public_dns_name))
+    print("WATCHDOG_USER={}".format(ASW_EC2_USER))
+    print("WATCHDOG_ADDR={}".format(watchdog.public_dns_name))
+    print("SERVICE_USER={}".format(ASW_EC2_USER))
+    print("SERVICE_AMI={}".format(DEFAULT_AMI))
 
 if __name__ == '__main__':
     main()
