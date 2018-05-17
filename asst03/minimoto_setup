@@ -74,6 +74,16 @@ def main():
     upload_executable(keyfile, 'minimoto_transcode', origin_transcode_service)
     upload_executable(keyfile, 'minimoto_transcode.sh', origin_transcode_service)
     scp_upload(keyfile, 'transcode.cron', origin_transcode_service)
+    
+    """create transcode service image"""
+    transcode_service_image = origin_transcode_service.create_image(Name = TYPE_TRANSCODE_SERVICE, NoReboot = True)
+    add_config(
+        {
+            CONFIG_TRANSCODE_SERVICE_AMI: transcode_service_image.image_id
+        }
+    )
+
+    upload_config_file(keyfile, origin_transcode_service)
     ssh_do_cmd(keyfile, origin_transcode_service, CMD_CRON_TRANSCODE)
 
     """print all the mandatory out messages"""
@@ -91,8 +101,7 @@ def setup_common_stuff(pem, host_instance):
     ssh_do_cmd(pem, host_instance, CMD_SAVE_INSTANCE_ID.format(instance_id = host_instance.instance_id))
     ssh_do_cmd(pem, host_instance, CMD_INSTALL_PIP)
     ssh_do_cmd(pem, host_instance, CMD_INSTALL_BOTO3)
-    scp_upload(pem, 'setup.json', host_instance)
-    ssh_do_cmd(pem, host_instance, CMD_CHMOD.format(mode = 600, file = 'setup.json'))
+    upload_config_file(pem, host_instance)
     scp_upload(pem, 'commonlib.py', host_instance)
 
 def upload_executable(pem, file, host_instance):

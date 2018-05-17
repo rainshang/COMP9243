@@ -43,8 +43,8 @@ CONFIG_SQS_URL = 'sqs_url'
 CONFIG_TRANSCODE_SERVICE_AMI = 'transcode_service_ami'
 
 ASW_EC2_USER = 'ubuntu'
-CMD_SSH = 'ssh -o StrictHostKeyChecking=no -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
-CMD_SCP_UPLOAD = 'scp -o StrictHostKeyChecking=no -i {pem} {source} {user}@{host}:{target}' + (' > /dev/null 2>&1' if not DEBUG else '')
+CMD_SSH = 'ssh -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
+CMD_SCP_UPLOAD = 'scp -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {source} {user}@{host}:{target}' + (' > /dev/null 2>&1' if not DEBUG else '')
 CMD_CHMOD = 'chmod {mode} {file}'
 CMD_INSTALL_PIP = 'curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py'
 CMD_INSTALL_BOTO3 = 'sudo pip3 install boto3'
@@ -67,6 +67,9 @@ def get_config():
     with open(__CONFIG_FILE_NAME) as config_file:
         return json.load(config_file)
 
+def clear_config():
+    os.remove(__CONFIG_FILE_NAME)
+
 def ssh_do_cmd(pem, host_instance, cmd):
     os.system(CMD_SSH.format(
         pem = pem,
@@ -83,6 +86,10 @@ def scp_upload(pem, source, host_instance):
         host = host_instance.public_dns_name,
         target = ''
     ))
+
+def upload_config_file(pem, host_instance):
+    scp_upload(pem, __CONFIG_FILE_NAME, host_instance)
+    ssh_do_cmd(pem, host_instance, CMD_CHMOD.format(mode = 600, file = __CONFIG_FILE_NAME))
 
 def boto3_resource(service_name):
     config = get_config()
@@ -173,3 +180,9 @@ def boto3_set_self_status(ec2, status):
                     ]
                 )
                 return
+
+def boto3_delete_snapshots(ec2, ami):
+    for snapshot in ec2.snapshots.filter(OwnerIds = ['self']):
+        if snapshot.description.find(ami) != -1:
+            snapshot.delete()
+    

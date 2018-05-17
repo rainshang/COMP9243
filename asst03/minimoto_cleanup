@@ -24,10 +24,18 @@ def main():
     )
     for instance in instances:
         instance.terminate()
+    for instance in instances:
         instance.wait_until_terminated()
     """delete EC2 security_group"""
     security_group = ec2.SecurityGroup(NAME_SECURITY_GROUP)
     security_group.delete(GroupName = NAME_SECURITY_GROUP)
+    """delete transcode service image"""
+    transcode_service_image = ec2.Image(config[CONFIG_TRANSCODE_SERVICE_AMI])
+    transcode_service_image.deregister()
+    """delete transcode service image's snapshots"""
+    boto3_delete_snapshots(ec2, config[CONFIG_TRANSCODE_SERVICE_AMI])
+
+    clear_config()
 
 if __name__ == '__main__':
     main()
