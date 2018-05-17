@@ -62,6 +62,7 @@ def main():
     """create EC2 instances"""
     client = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_CLIENT)
     setup_common_stuff(keyfile, client)
+    upload_config_file(keyfile, client)
     upload_executable(keyfile, 'minimoto_client', client)
 
     watchdog = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_WATCHDOG)
@@ -83,6 +84,7 @@ def main():
         }
     )
 
+    upload_config_file(keyfile, watchdog)
     upload_config_file(keyfile, origin_transcode_service)
     ssh_do_cmd(keyfile, origin_transcode_service, CMD_CRON_TRANSCODE)
 
@@ -101,7 +103,6 @@ def setup_common_stuff(pem, host_instance):
     ssh_do_cmd(pem, host_instance, CMD_SAVE_INSTANCE_ID.format(instance_id = host_instance.instance_id))
     ssh_do_cmd(pem, host_instance, CMD_INSTALL_PIP)
     ssh_do_cmd(pem, host_instance, CMD_INSTALL_BOTO3)
-    upload_config_file(pem, host_instance)
     scp_upload(pem, 'commonlib.py', host_instance)
 
 def upload_executable(pem, file, host_instance):
