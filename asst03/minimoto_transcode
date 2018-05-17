@@ -72,10 +72,7 @@ if __name__ == '__main__':
 
     '''check instance Status'''
     ec2 = boto3_resource('ec2')
-    ec2client = boto3_client('ec2')
-    instance = boto3_get_self_instance(ec2)
-    selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
-    if selftags['Status'] != 'idle':
+    if boto3_get_self_status(ec2) != 'idle':
         print("this instances doing other transcoding")
         exit(0)
 
@@ -95,14 +92,8 @@ if __name__ == '__main__':
         exit(0)
 
     '''change instance Status'''
-    ec2client.create_tags(Resources=[boto3_get_self_instance(ec2).instance_id],
-                          Tags=[{
-                          'Key': "Status",
-                          'Value': "transcoding"
-                          }])
-    instance = boto3_get_self_instance(ec2)
-    selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
-    print('instance Status is ' + str(selftags['Status']))
+    boto3_set_self_status(ec2, STATUS_TRANSCODING)
+    print('instance Status is ' + str(boto3_get_self_status(ec2)))
 
 
     image_path = msg[0]['Body']
@@ -122,15 +113,8 @@ if __name__ == '__main__':
     while 1:
         time.sleep(4)
         if not t1.is_alive() or flag == 1:
-            ec2client.create_tags(Resources=[boto3_get_self_instance(ec2).instance_id],
-                                  Tags=[{
-                                  'Key': "Status",
-                                  'Value': "idle"
-                                  }])
-            instance = boto3_get_self_instance(ec2)
-            selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
-            print('instance Status is ' + str(selftags['Status']))
+            boto3_set_self_status(ec2, STATUS_IDLE)
+            print('instance Status is ' + str(boto3_get_self_status(ec2)))
             print('minimoto_transcode leaving....')
             exit(0)
-
         s_client.change_message_visibility(QueueUrl = sqs_url, ReceiptHandle = receipt_handle,VisibilityTimeout = 10)
