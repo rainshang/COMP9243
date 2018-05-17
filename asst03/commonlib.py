@@ -40,6 +40,7 @@ CONFIG_KEYFILE_NAME = 'keyfile_name'
 CONFIG_KEYID = 'aws_access_key_id'
 CONFIG_KEY = 'aws_secret_access_key'
 CONFIG_SQS_URL = 'sqs_url'
+CONFIG_TRANSCODE_SERVICE_AMI = 'transcode_service_ami'
 
 ASW_EC2_USER = 'ubuntu'
 CMD_SSH = 'ssh -o StrictHostKeyChecking=no -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
@@ -146,3 +147,29 @@ def boto3_get_self_instance(ec2):
     with open(__FILE_INSTANCE_ID) as file:
         instance_id = file.readline().strip()
     return ec2.Instance(instance_id)
+
+def boto3_get_self_status(ec2):
+    self_instance = boto3_get_self_instance(ec2)
+    for key_value in self_instance.tags:
+        if key_value['Key'] == __INSTANCE_TAG_TYPE:
+            if key_value['Value'] != TYPE_TRANSCODE_SERVICE:
+                raise TypeError('Not a supported instance type')
+        elif key_value['Key'] == __INSTANCE_TAG_STATUS:
+            return key_value['Value']
+
+def boto3_set_self_status(ec2, status):
+    self_instance = boto3_get_self_instance(ec2)
+    for key_value in self_instance.tags:
+        if key_value['Key'] == __INSTANCE_TAG_TYPE:
+            if key_value['Value'] != TYPE_TRANSCODE_SERVICE:
+                raise TypeError('Not a supported instance type')
+            else:
+                self_instance.create_tags(
+                    Tags = [
+                        {
+                            'Key': __INSTANCE_TAG_STATUS,
+                            'Value': status
+                        }
+                    ]
+                )
+                return
