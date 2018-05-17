@@ -1,0 +1,136 @@
+#!/usr/bin/python3
+from commonlib import *
+import errno
+import os
+import time
+import threading
+
+def create_tmp_dir(image_path):
+    try:
+        os.makedirs(image_path)
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            command = "rm -rf " + image_path
+            os.system(command)
+            os.makedirs(image_path)
+        else:
+            raise
+
+def search_file(input_bucket, image_path):
+    s3_in_client = boto3_client('s3')
+    objs = s3_in_client.list_objects(Bucket = input_bucket,
+                                     Prefix = image_path)
+    try:
+        img_path_list = [c["Key"] for c in objs["Contents"]]
+    except KeyError:
+        img_path_list = []
+        print("NO FILE CAN FINDED")
+
+    return img_path_list
+
+def transcode(workspace, image_path, receipt_handle, input_bucket, output_bucket):
+    try:
+        global flag
+        '''search images in input bucket'''
+        create_tmp_dir(workspace + image_path)
+        img_path_list = search_file(NAME_BUCKET_INPUT, image_path)
+        '''download images from input_bucket'''
+        for path in img_path_list:
+            input_bucket.download_file(path, workspace + path)
+        '''do transcode'''
+        command = "./minimoto_transcode.sh" + " " + workspace + image_path + " " + workspace + image_path + "/" + image_path + ".mp4"
+        os.system(command)
+        '''upload video to output_bucket'''
+        output_bucket.upload_file(workspace + image_path + "/" + image_path + ".mp4", image_path + ".mp4")
+        '''delete images in input_bucket'''
+        delete_objs = []
+        for obj in input_bucket.objects.filter(Prefix = image_path):
+            delete_objs.append({'Key': obj.key})
+
+        input_bucket.delete_objects(
+            Delete={
+                'Objects': delete_objs
+            }
+        )
+        command = "rm -rf " + workspace + image_path
+        os.system(command)
+        '''delete message in sqs'''
+        sqs_client.delete_message(QueueUrl = sqs_url, ReceiptHandle = receipt_handle)
+
+        print('transcode successfully')
+
+        flag = 1
+
+    except:
+        print('thread exiting...')
+
+
+
+if __name__ == '__main__':
+
+    flag = 0
+
+    '''check instance Status'''
+    ec2 = boto3_resource('ec2')
+    ec2client = boto3_client('ec2')
+    instance = boto3_get_self_instance(ec2)
+    selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
+    if selftags['Status'] != 'idle':
+        print("this instances doing other transcoding")
+        exit(0)
+
+    workspace = '/home/ubuntu/'
+    '''receive message from sqs'''
+    config = get_config()
+    sqs_url = config[CONFIG_SQS_URL]
+    sqs_client = boto3_client('sqs')
+    message = sqs_client.receive_message(QueueUrl = sqs_url,
+                                         AttributeNames = ['All'],
+                                         MaxNumberOfMessages = 1,
+                                         VisibilityTimeout = 10)
+    try:
+        msg = message['Messages']
+    except KeyError:
+        print("SQS is empty")
+        exit(0)
+
+    '''change instance Status'''
+    ec2client.create_tags(Resources=[boto3_get_self_instance(ec2).instance_id],
+                          Tags=[{
+                          'Key': "Status",
+                          'Value': "transcoding"
+                          }])
+    instance = boto3_get_self_instance(ec2)
+    selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
+    print('instance Status is ' + str(selftags['Status']))
+
+
+    image_path = msg[0]['Body']
+    receipt_handle = msg[0]['ReceiptHandle']
+
+    input_bucket = boto3_resource('s3').Bucket(NAME_BUCKET_INPUT)
+    output_bucket = boto3_resource('s3').Bucket(NAME_BUCKET_OUTPUT)
+    ec2_client = boto3_client('ec2')
+
+    try:
+        t1 = threading.Thread(target=transcode, args=[workspace, image_path, receipt_handle, input_bucket, output_bucket])
+        t1.start()
+    except:
+        print('......')
+
+    s_client = boto3_client('sqs')
+    while 1:
+        time.sleep(4)
+        if not t1.is_alive() or flag == 1:
+            ec2client.create_tags(Resources=[boto3_get_self_instance(ec2).instance_id],
+                                  Tags=[{
+                                  'Key': "Status",
+                                  'Value': "idle"
+                                  }])
+            instance = boto3_get_self_instance(ec2)
+            selftags = {kv["Key"]: kv["Value"] for kv in instance.tags}
+            print('instance Status is ' + str(selftags['Status']))
+            print('minimoto_transcode leaving....')
+            exit(0)
+
+        s_client.change_message_visibility(QueueUrl = sqs_url, ReceiptHandle = receipt_handle,VisibilityTimeout = 10)
