@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
     '''check instance Status'''
     ec2 = boto3_resource('ec2')
-    if boto3_get_self_status(ec2) != 'idle':
+    if boto3_get_self_status(ec2) != STATUS_IDLE:
         print("this instances doing other transcoding")
         exit(0)
 
