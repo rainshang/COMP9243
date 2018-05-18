@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+from commonlib import *
+import sys
+import re
+import datetime
+from operator import itemgetter
+import time
+
+def get_instance_cpu_util(cw, instance):
+    results = cw.get_metric_statistics(Namespace='AWS/EC2',
+                                       MetricName='CPUUtilization',
+                                       StartTime=datetime.datetime.utcnow() - datetime.timedelta(minutes=1),
+                                       EndTime=datetime.datetime.utcnow(),
+                                       Period=60,
+                                       Statistics=['Average'],
+                                       Dimensions=[{'Name':'InstanceId', 'Value':instance.instance_id}])
+
+    if len(results["Datapoints"]) > 0:
+        return results["Datapoints"][0]["Average"]
+    else:
+        return 0
+
+def get_sqs_length(sqs, sqs_url):
+    result = sqs.get_queue_attributes(QueueUrl=sqs_url, AttributeNames=['ApproximateNumberOfMessages'])
+    return result["Attributes"]["ApproximateNumberOfMessages"]
+
+if __name__ == '__main__':
+    status_flag = 0
+    scale_to_num = 0
+    if len(sys.argv) == 2:
+        if sys.argv[1] == '--status':
+            status_flag = 1
+        else:
+            scale_to_num = re.findall(r"\d+", sys.argv[1])[0]
+    if len(sys.argv) == 3:
+        status_flag = 1
+        scale_to_num = re.findall(r"\d+", sys.argv[1])[0]
+
+    ec2 = boto3_resource('ec2')
+    cw = boto3_client('cloudwatch')
+    sqs = boto3_client('sqs')
+    sqs_url = get_config()[CONFIG_SQS_URL]
+    service_instances_list = boto3_get_instances(ec2, TYPE_TRANSCODE_SERVICE)
+
+    running_list = []
+    stop_list = []
+    idle_list = []
+    for ins in service_instances_list:
+        if (ins.state['Name']) == 'running':
+            running_list.append(ins)
+        if (ins.state['Name']) == 'stopped':
+            stop_list.append(ins)
+
+    for ins in running_list:
+        for key_value in ins.tags:
+            if key_value['Key'] == 'Status':
+                if key_value['Value'] == 'idle':
+                    idle_list.append(ins)
+
+    '''compute average cpu utilization'''
+    cpu_utilization = 0
+    for ins in service_instances_list:
+        cpu_utilization += get_instance_cpu_util(cw, ins)
+        if status_flag == 1:
+            print('instance: ' + str(ins.instance_id) + ' ' + str(ins.state['Name']) + ' ' + str(get_instance_cpu_util(cw, ins)))
+    ave_cpu_utilization = cpu_utilization / len(service_instances_list)
+    if status_flag == 1:
+        print('average utilisation: ' + str(ave_cpu_utilization))
+    '''compute sqs length'''
+    sqs_length = get_sqs_length(sqs, sqs_url)
+    if status_flag == 1:
+        print('queue length: ' + str(sqs_length))
+
+    '''scale instance numbers according to scale_to_num'''
+    # running_list = len(running_list)
+    # stop_len = len(stop_list)
+    # if int(scale_to_num) > 0:
+    #     if len(running_list) < int(scale_to_num):
+    #         add_num = int(scale_to_num) - len(running_list)
+    #         for num in range(0, add_num):
+    #             new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
+    #             ssh_do_cmd(get_pem_on_instance(), new_instance, CMD_CRON_TRANSCODE)
+    #     elif len(running_list) > int(scale_to_num):
+    #         stop_num = len(running_list) - int(scale_to_num)
+    #         while instance_len > 0 and stop_num > 0:
+    #             if stop_len > 0:
+    #                 stop_list[0].terminate()
+    #                 stop_list.remove(stop_list[0])
+    #                 stop_len -= 1
+    #             else:
+    #                 running_list[0].terminate()
+    #                 running_list.remove(running_list[0])
+    #             instance_len -= 1
+    #             stop_num -= 1
+    # if int(scale_to_num) > 0:
+    #     exit(0)
+
+    idle_len = len(idle_list)
+    run_len = len(running_list)
+    index = 0
+    '''auto scaling'''
+    if ave_cpu_utilization > 50:
+        if cpu_utilization > 80 or int(sqs_length) > len(running_list) * 2:
+            if len(stop_list) > 0:
+                re_start_instance = ec2.instances.filter(InstanceIds=[stop_list[0].instance_id]).start()
+                ssh_do_cmd(get_pem_on_instance(), re_start_instance, CMD_CRON_TRANSCODE)
+            else:
+                new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
+                ssh_do_cmd(get_pem_on_instance(), new_instance, CMD_CRON_TRANSCODE)
+    else:
+        if (cpu_utilization) < 20 or int(sqs_length) < int(len(running_list) / 2):
+            while run_len > 1 and idle_len > 0:
+                ec2.instances.filter(InstanceIds=[idle_list[index].instance_id]).stop()
+                index += 1
+                idle_len -= 1
+                run_len -= 1
