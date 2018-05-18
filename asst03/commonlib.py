@@ -142,8 +142,8 @@ def boto3_create_instance(ec2, ami, type):
         ]
     )[0]
     instance.wait_until_running()
-    ssh_do_cmd(instance, CMD_SAVE_INSTANCE_ID.format(instance_id = instance.instance_id))
     instance = ec2.Instance(instance.instance_id)
+    ssh_do_cmd(instance, CMD_SAVE_INSTANCE_ID.format(instance_id = instance.instance_id))
     return instance
 
 def boto3_get_instances(ec2, type):

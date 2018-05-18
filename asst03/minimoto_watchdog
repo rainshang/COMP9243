@@ -87,7 +87,7 @@ if __name__ == '__main__':
             if add_num > 0:
                 for num in range(0, add_num):
                     new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
-                    ssh_do_cmd(get_pem_on_instance(), new_instance, CMD_CRON_TRANSCODE)
+                    ssh_do_cmd(new_instance, CMD_CRON_TRANSCODE)
         elif len(running_list) > int(scale_to_num):
             stop_num = len(running_list) - int(scale_to_num)
             while stop_num > 0:
@@ -108,7 +108,7 @@ if __name__ == '__main__':
                 re_start_instance = ec2.instances.filter(InstanceIds=[stop_list[0].instance_id]).start()
             else:
                 new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
-                ssh_do_cmd(get_pem_on_instance(), new_instance, CMD_CRON_TRANSCODE)
+                ssh_do_cmd(new_instance, CMD_CRON_TRANSCODE)
     else:
         if (cpu_utilization) < 20 or int(sqs_length) < int(len(running_list) / 2):
             while run_len > 1 and idle_len > 0:
