@@ -1,18 +1,31 @@
 we use python3 as the main programming language to implement assignment 3.
 we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
 
+all the files of this assignment:
+commonlib.py
+minimoto_setup
+minimoto_client
+minimoto_watchdog
+minimoto_transcode
+minimoto_transcode.sh
+transcode.cron
+minimoto_cleanup
+Makefile
+DESIGN
+
 --setup
+    --save the name of keyfile passed by caller
     --save 'aws_access_key_id' and 'aws_secret_access_key' passed by caller
     --create 'SQS', save the 'sqsUrl'
     --create 2 'input' and 'output' S3 buckets
     --create a 'security_group' for all EC2 instance
-    --create an EC2 instance for 'client' with the specific AMI 'ami–96666ff5', setup python, boto3 environment, upload client script
-    --create an EC2 instance for 'watchdog' with the specific AMI 'ami–96666ff5', setup python, boto3 environment, upload watchdog script
-    --create the original EC2 instance for the 'transcode service' with the specific AMI 'ami–96666ff5', setup python, boto3, transcode environment, upload transcode script
+    --create an EC2 instance for 'client' with the specific AMI 'ami–96666ff5', setup python, boto3 environment, upload config file, client script
+    --create an EC2 instance for 'watchdog' with the specific AMI 'ami–96666ff5', setup python, boto3 environment, upload config file, watchdog script
+    --create the original EC2 instance for the 'transcode service' with the specific AMI 'ami–96666ff5', setup python, boto3, transcode environment, upload config file, transcode script
     Particularlly, then create image from this origin, get a new AMI for other 'transcode service' instances in future. We create other instances with this new AMI, without setup anymore.
 
 --client
-    --upload image to 'input', using timestamp to name the temporary directory
+    --upload image to 'input', using random name the temporary directory
     --generate the message for this task and send it to 'SQS'
     --using a timer to check the output directory if flag is --wait
 

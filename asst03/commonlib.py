@@ -108,7 +108,7 @@ def boto3_client(service_name):
         aws_secret_access_key = config[CONFIG_KEY],
         region_name = REGION)
 
-def boto3_create_instance(ec2, ami, type):
+def boto3_create_instance(ec2, ami, type, pem):
     tags = [
         {
             'Key': __INSTANCE_TAG_TYPE,
@@ -137,6 +137,7 @@ def boto3_create_instance(ec2, ami, type):
         ]
     )[0]
     instance.wait_until_running()
+    ssh_do_cmd(pem, instance, CMD_SAVE_INSTANCE_ID.format(instance_id = instance.instance_id))
     instance = ec2.Instance(instance.instance_id)
     return instance
 
