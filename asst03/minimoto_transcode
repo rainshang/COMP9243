@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 from commonlib import *
+import sys
 import errno
 import os
 import time
@@ -67,6 +68,10 @@ def transcode(workspace, image_path, receipt_handle, input_bucket, output_bucket
 
 
 if __name__ == '__main__':
+    """set log"""
+    if not os.path.exists('minimoto.log'):
+        os.system('touch minimoto.log')
+    sys.stdout = open('minimoto.log', 'a')
 
     flag = 0
 

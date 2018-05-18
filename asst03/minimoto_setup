@@ -68,6 +68,8 @@ def main():
     watchdog = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_WATCHDOG)
     setup_common_stuff(keyfile, watchdog)
     upload_executable(keyfile, 'minimoto_watchdog', watchdog)
+    scp_upload(keyfile, keyfile, watchdog)
+    ssh_do_cmd(keyfile, watchdog, CMD_CHMOD.format(mode = 400, file = get_pem_on_instance()))
 
     origin_transcode_service = boto3_create_instance(ec2, DEFAULT_AMI, TYPE_TRANSCODE_SERVICE)
     setup_common_stuff(keyfile, origin_transcode_service)

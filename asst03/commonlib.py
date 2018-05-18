@@ -70,6 +70,9 @@ def get_config():
 def clear_config():
     os.remove(__CONFIG_FILE_NAME)
 
+def get_pem_on_instance():
+    return get_config()[CONFIG_KEYFILE_NAME] + '.pem'
+
 def ssh_do_cmd(pem, host_instance, cmd):
     os.system(CMD_SSH.format(
         pem = pem,

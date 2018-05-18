@@ -17,7 +17,9 @@ we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
     --using a timer to check the output directory if flag is --wait
 
 --transcode service
-    --use 'crontab' command to execute task(default every one minute) on each VM, using 'flock' to avoid multitask running simultaneously.
+    --use 'crontab' command to execute task(default every one minute) on each VM
+    --when start, check the flag to see whether this EC2 instance is transcoding
+    --if ture, stop; false, continue to do the real transcode task
     --in the task,
         --receive msg from 'SQS'
             --create a thread to update the visibility timeout to 120s, using a 110s timer, until the encoding proccess is done.
@@ -38,6 +40,7 @@ we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
     --delete 'SQS'
     --delete S3
     --delete 'client', 'watchdog', all 'transcode service'
-    --delete AMI
-    --others
+    --delete security_group
+    --delete the AMI created by us
+    --others the snapshots using the AMI above
 
