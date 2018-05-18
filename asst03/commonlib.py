@@ -4,7 +4,7 @@ import json
 import boto3
 import socket
 
-DEBUG = True
+DEBUG = False
 
 DOMAIN = 'au.edu.unsw.comp9243.group4'
 REGION = 'ap-southeast-2'
@@ -194,4 +194,3 @@ def boto3_delete_snapshots(ec2, ami):
     for snapshot in ec2.snapshots.filter(OwnerIds = ['self']):
         if snapshot.description.find(ami) != -1:
             snapshot.delete()
-    

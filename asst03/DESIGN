@@ -35,8 +35,10 @@ DESIGN
     --if ture, stop; false, continue to do the real transcode task
     --in the task,
         --receive msg from 'SQS'
-            --create a thread to update the visibility timeout to 120s, using a 110s timer, until the encoding proccess is done.
+            --main process to update the visibility timeout to 120s, using a 4s timer to continue to extend visibility timeout, until the encoding proccess is done.
+            if the instance is shutdown or other reasons that cannot transcode successfully, the message will back to sqs and other service will do the task.
             --create a thread to do the transcode task
+    -- when the task is done, set the flag to 'idle' and ready to do next task
 
 --watchdog
     --check the aggregate CPU usage
@@ -56,4 +58,3 @@ DESIGN
     --delete security_group
     --delete the AMI created by us
     --others the snapshots using the AMI above
-
