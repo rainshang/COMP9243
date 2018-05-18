@@ -79,7 +79,7 @@ def main():
     scp_upload(keyfile, 'transcode.cron', origin_transcode_service)
     
     """create transcode service image"""
-    transcode_service_image = origin_transcode_service.create_image(Name = TYPE_TRANSCODE_SERVICE, NoReboot = True)
+    transcode_service_image = origin_transcode_service.create_image(Name = TYPE_TRANSCODE_SERVICE)
     add_config(
         {
             CONFIG_TRANSCODE_SERVICE_AMI: transcode_service_image.image_id
@@ -87,6 +87,8 @@ def main():
     )
 
     upload_config_file(keyfile, watchdog)
+
+    origin_transcode_service.wait_until_running()
     upload_config_file(keyfile, origin_transcode_service)
     ssh_do_cmd(keyfile, origin_transcode_service, CMD_CRON_TRANSCODE)
 
