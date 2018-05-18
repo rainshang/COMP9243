@@ -43,8 +43,8 @@ CONFIG_SQS_URL = 'sqs_url'
 CONFIG_TRANSCODE_SERVICE_AMI = 'transcode_service_ami'
 
 ASW_EC2_USER = 'ubuntu'
-CMD_SSH = 'ssh -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
-CMD_SCP_UPLOAD = 'scp -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {source} {user}@{host}:{target}' + (' > /dev/null 2>&1' if not DEBUG else '')
+__CMD_SSH = 'ssh -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {user}@{host}' + (' > /dev/null 2>&1' if not DEBUG else '')
+__CMD_SCP_UPLOAD = 'scp -o StrictHostKeyChecking=no -o ConnectionAttempts=100 -i {pem} {source} {user}@{host}:{target}' + (' > /dev/null 2>&1' if not DEBUG else '')
 CMD_CHMOD = 'chmod {mode} {file}'
 CMD_INSTALL_PIP = 'curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py'
 CMD_INSTALL_BOTO3 = 'sudo pip3 install boto3'
@@ -70,29 +70,34 @@ def get_config():
 def clear_config():
     os.remove(__CONFIG_FILE_NAME)
 
-def get_pem_on_instance():
+def normalize_pem(keyfile):
+    normalized_pem = get_normalized_pem()
+    os.system('cp {keyfile} {normalized_pem}'.format(keyfile = keyfile, normalized_pem = normalized_pem))
+    os.system(CMD_CHMOD.format(mode = 400, file = normalized_pem))
+
+def get_normalized_pem():
     return get_config()[CONFIG_KEYFILE_NAME] + '.pem'
 
-def ssh_do_cmd(pem, host_instance, cmd):
-    os.system(CMD_SSH.format(
-        pem = pem,
+def ssh_do_cmd(host_instance, cmd):
+    os.system(__CMD_SSH.format(
+        pem = get_normalized_pem(),
         user = ASW_EC2_USER,
         host = host_instance.public_dns_name
         )
         + ' \'{}\''.format(cmd))
 
-def scp_upload(pem, source, host_instance):
-    os.system(CMD_SCP_UPLOAD.format(
-        pem = pem,
+def scp_upload(source, host_instance):
+    os.system(__CMD_SCP_UPLOAD.format(
+        pem = get_normalized_pem(),
         source = source,
         user = ASW_EC2_USER,
         host = host_instance.public_dns_name,
         target = ''
     ))
 
-def upload_config_file(pem, host_instance):
-    scp_upload(pem, __CONFIG_FILE_NAME, host_instance)
-    ssh_do_cmd(pem, host_instance, CMD_CHMOD.format(mode = 600, file = __CONFIG_FILE_NAME))
+def upload_config_file(host_instance):
+    scp_upload(__CONFIG_FILE_NAME, host_instance)
+    ssh_do_cmd(host_instance, CMD_CHMOD.format(mode = 600, file = __CONFIG_FILE_NAME))
 
 def boto3_resource(service_name):
     config = get_config()
@@ -108,7 +113,7 @@ def boto3_client(service_name):
         aws_secret_access_key = config[CONFIG_KEY],
         region_name = REGION)
 
-def boto3_create_instance(ec2, ami, type, pem):
+def boto3_create_instance(ec2, ami, type):
     tags = [
         {
             'Key': __INSTANCE_TAG_TYPE,
@@ -137,7 +142,7 @@ def boto3_create_instance(ec2, ami, type, pem):
         ]
     )[0]
     instance.wait_until_running()
-    ssh_do_cmd(pem, instance, CMD_SAVE_INSTANCE_ID.format(instance_id = instance.instance_id))
+    ssh_do_cmd(instance, CMD_SAVE_INSTANCE_ID.format(instance_id = instance.instance_id))
     instance = ec2.Instance(instance.instance_id)
     return instance
 
