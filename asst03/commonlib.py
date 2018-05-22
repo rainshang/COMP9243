@@ -23,7 +23,7 @@ INSTANCE_FILTER_GROUP = {
                 ]
             }
 
-DEFAULT_AMI = 'ami-d38a4ab1' if DEBUG else 'ami–96666ff5'
+DEFAULT_AMI = 'ami-d38a4ab1' if DEBUG else 'ami-96666ff5'
 __INSTANCE_TYPE = 't2.micro' if DEBUG else 't2.small'
 
 __INSTANCE_TAG_TYPE = 'Type'
