@@ -1,9 +1,16 @@
 #!/bin/bash
-if python3 -c "import boto3" &> /dev/null; then
+if pip3 &> /dev/null; then
     :
 else
-    pip3 install boto3
+    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && sudo python3 get-pip.py && rm get-pip.py
 fi
 if [ $? -eq 0 ]; then
-    chmod 500 minimoto_setup.py && python3 minimoto_setup.py $1 $2 $3
+    if python3 -c "import boto3" &> /dev/null; then
+        :
+    else
+        sudo pip3 install boto3
+    fi
+    if [ $? -eq 0 ]; then
+        chmod 500 minimoto_setup.py && python3 minimoto_setup.py $1 $2 $3
+    fi
 fi
