@@ -42,14 +42,23 @@ DESIGN
 
 --watchdog
     --check the aggregate CPU usage
-    if(cpu usage > 50%)
-        if(cpu usage > 80%
-            || len_sqs > num_EC2 * 2)
+    if ave cpu usage > 50% and sqs length == 0:
+        do nothing; all good
+
+    if ave cpu usage > 50% and sqs length > 0:
+        if stoped instance numbers > 0:
+            restart a stoped instance
+        else:
             create a new EC2 instance, no more than --scale_to
-    else
-        if(cpu usage < 20%
-            || len_sqs < num_EC2 / 2)
-            shutdown all the idle EC2 instance, leave one(as the standby in 'setup')
+
+    if ave cpu_utilization < 50 and sqs length == 0:
+        shutdown all the idle EC2 instance, leave one(as the standby in 'setup')
+
+    if sqs length > 1:
+        if stoped instance numbers > 0:
+            restart a stoped instance
+        else:
+            create a new EC2 instance, no more than --scale_to
 
 --cleanup
     --delete 'SQS'

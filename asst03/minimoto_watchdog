@@ -102,17 +102,35 @@ if __name__ == '__main__':
     run_len = len(running_list)
     index = 0
     '''auto scaling'''
-    if ave_cpu_utilization > 50:
-        if cpu_utilization > 80 or int(sqs_length) > len(running_list) * 2:
-            if len(stop_list) > 0:
-                re_start_instance = ec2.instances.filter(InstanceIds=[stop_list[0].instance_id]).start()
-            else:
-                new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
-                ssh_do_cmd(new_instance, CMD_CRON_TRANSCODE)
-    else:
-        if (cpu_utilization) < 20 or int(sqs_length) < int(len(running_list) / 2):
-            while run_len > 1 and idle_len > 0:
-                ec2.instances.filter(InstanceIds=[idle_list[index].instance_id]).stop()
-                index += 1
-                idle_len -= 1
-                run_len -= 1
+    if ave_cpu_utilization >= 50 and int(sqs_length) == 0:
+        print ('nothing to do')
+        exit(0)
+
+    if cpu_utilization >= 50 and int(sqs_length) > 0:
+        print('scale up')
+        if len(stop_list) > 0:
+            re_start_instance = ec2.instances.filter(InstanceIds=[stop_list[0].instance_id]).start()
+            exit(0)
+        else:
+            new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
+            ssh_do_cmd(new_instance, CMD_CRON_TRANSCODE)
+            exit(0)
+
+    if cpu_utilization < 50 and int(sqs_length) == 0:
+        while run_len > 1 and idle_len > 0:
+            print('scale down')
+            ec2.instances.filter(InstanceIds=[idle_list[index].instance_id]).stop()
+            index += 1
+            idle_len -= 1
+            run_len -= 1
+        exit(0)
+
+    if int(sqs_length) > 1:
+        print('scale up')
+        if len(stop_list) > 0:
+            re_start_instance = ec2.instances.filter(InstanceIds=[stop_list[0].instance_id]).start()
+            exit(0)
+        else:
+            new_instance = boto3_create_instance(ec2, get_config()[CONFIG_TRANSCODE_SERVICE_AMI], TYPE_TRANSCODE_SERVICE)
+            ssh_do_cmd(new_instance, CMD_CRON_TRANSCODE)
+            exit(0)
