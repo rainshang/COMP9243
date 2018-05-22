@@ -4,6 +4,7 @@ we use a thrid party library 'Boto3' as the python3 implement of AWS CLI.
 all the files of this assignment:
 commonlib.py
 minimoto_setup
+minimoto_setup.py
 minimoto_client
 minimoto_watchdog
 minimoto_transcode
